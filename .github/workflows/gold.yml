@@ -22,3 +22,11 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
+
+      # ⭐ این دقیقاً همون بخشیه که کم داشتی و فایل رو موندگار میکنه:
+      - name: Save Last Price to GitHub
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add last_price.txt
+          git diff --quiet && git diff --staged --quiet || (git commit -m "📊 Update last price" && git push)
