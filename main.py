@@ -1,15 +1,13 @@
 import os
 import requests
-from datetime import datetime
-import jdatetime
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = os.environ["CHAT_ID"]
 
-API_URL = "http://et.tala.ir/webservice/haghanigold.com/6397dbw8333f095bb55cd539f865a994"
+PRICE_API = "http://et.tala.ir/webservice/haghanigold.com/6397dbw8333f095bb55cd539f865a994"
+TIME_API = "https://api.keybit.ir/time/"
 
 
-# تبدیل عدد به فارسی
 def to_persian_number(text):
     return str(text).translate(str.maketrans(
         "0123456789",
@@ -17,31 +15,18 @@ def to_persian_number(text):
     ))
 
 
-# ماه‌ها
-months = [
-    "فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور",
-    "مهر","آبان","آذر","دی","بهمن","اسفند"
-]
-
-# روزهای هفته (درست)
-weekdays = [
-    "دوشنبه","سه‌شنبه","چهارشنبه","پنجشنبه","جمعه","شنبه","یکشنبه"
-]
-
-
 # گرفتن قیمت
-data = requests.get(API_URL).json()
-
+data = requests.get(PRICE_API).json()
 price = data["geram18"]["value"] // 10
 price_text = f"{price:,}"
 
 
-# زمان دقیق ایران (بدون API و بدون خطا)
-now = jdatetime.datetime.now()
+# گرفتن تاریخ دقیق شمسی (کاملاً درست)
+tdata = requests.get(TIME_API).json()["date"]
 
-date_text = f"{now.day} {months[now.month-1]} {now.year}"
-weekday = weekdays[now.weekday()]
-time_text = now.strftime("%H:%M")
+date_text = tdata["full"]["official"]["iso"]["date"]["persian"]
+weekday = tdata["week_day"]["name"]
+time_text = tdata["time24"]["full"][:5]
 
 
 # چک قیمت قبلی
@@ -57,12 +42,10 @@ if last_price == str(price):
     exit()
 
 
-# ذخیره قیمت جدید
 with open("last_price.txt", "w") as f:
     f.write(str(price))
 
 
-# پیام نهایی
 message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
 
 🗓 {to_persian_number(date_text)} | {weekday}
@@ -75,13 +58,9 @@ message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
 """
 
 
-# ارسال به تلگرام
 requests.post(
     f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-    data={
-        "chat_id": CHAT_ID,
-        "text": message
-    }
+    data={"chat_id": CHAT_ID, "text": message}
 )
 
 print("Done")
