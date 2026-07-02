@@ -16,35 +16,51 @@ def to_persian_number(text):
 
 
 # گرفتن قیمت
-price_resp = requests.get(PRICE_API, timeout=10)
-price_resp.raise_for_status()
-data = price_resp.json()
+data = requests.get(PRICE_API).json()
 price = data["geram18"]["value"] // 10
 price_text = f"{price:,}"
 
-# گرفتن تاریخ و ساعت دقیق شمسی
-time_resp = requests.get(TIME_API, timeout=10)
-time_resp.raise_for_status()
-tdata = time_resp.json()["date"]
+
+# گرفتن تاریخ دقیق شمسی (کاملاً درست)
+tdata = requests.get(TIME_API).json()["date"]
 
 date_text = tdata["full"]["official"]["iso"]["date"]["persian"]
 weekday = tdata["week_day"]["name"]
 time_text = tdata["time24"]["full"][:5]
 
-print("DEBUG price:", price)
-print("DEBUG date:", date_text, weekday, time_text)
 
 # چک قیمت قبلی
 try:
     with open("last_price.txt", "r") as f:
         last_price = f.read().strip()
-except FileNotFoundError:
+except:
     last_price = ""
 
-print("DEBUG last_price:", repr(last_price))
 
 if last_price == str(price):
-    print("Price not changed. Exiting without sending.")
+    print("Price not changed.")
     exit()
 
-with open("last_price.txt",
+
+with open("last_price.txt", "w") as f:
+    f.write(str(price))
+
+
+message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
+
+🗓 {to_persian_number(date_text)} | {weekday}
+🕒 بروزرسانی: {to_persian_number(time_text)}
+
+💰 هر گرم: {to_persian_number(price_text)} تومان
+
+━━━━━━━━━━━━━━━
+طلای ماهان (اسکندری گلد)💎
+"""
+
+
+requests.post(
+    f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+    data={"chat_id": CHAT_ID, "text": message}
+)
+
+print("Done")
