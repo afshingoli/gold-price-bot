@@ -15,67 +15,40 @@ def to_persian_number(text):
     ))
 
 
-# ۱. گرفتن قیمت طلا
-try:
-    price_data = requests.get(PRICE_API).json()
-    price = price_data["geram18"]["value"] // 10
-    price_text = f"{price:,}"
-except Exception as e:
-    print(f"Error fetching price: {e}")
-    exit()
+# گرفتن قیمت
+price_resp = requests.get(PRICE_API, timeout=10)
+price_resp.raise_for_status()
+data = price_resp.json()
+price = data["geram18"]["value"] // 10
+price_text = f"{price:,}"
 
+# گرفتن تاریخ و ساعت دقیق شمسی
+time_resp = requests.get(TIME_API, timeout=10)
+time_resp.raise_for_status()
+tdata = time_resp.json()["date"]
 
-# ۲. گرفتن تاریخ و زمان (اصلاح ساختار API)
-try:
-    time_response = requests.get(TIME_API).json()
-    date_text = time_response["date"]["full"]["official"]["iso"]["date"]["persian"]
-    weekday = time_response["week_day"]["name"]
-    time_text = time_response["time24"]["full"][:5]
-except Exception as e:
-    print(f"Error fetching time: {e}")
-    exit()
+date_text = tdata["full"]["official"]["iso"]["date"]["persian"]
+weekday = tdata["week_day"]["name"]
+time_text = tdata["time24"]["full"][:5]
 
+print("DEBUG price:", price)
+print("DEBUG date:", date_text, weekday, time_text)
 
-# ۳. بررسی تغییر قیمت
+# چک قیمت قبلی
 try:
     with open("last_price.txt", "r") as f:
         last_price = f.read().strip()
-except:
+except FileNotFoundError:
     last_price = ""
 
-# نکته: اگر می‌خواهی در هر شرایطی پیام ارسال شود، ۳ خط زیر را کامنت یا حذف کن:
+print("DEBUG last_price:", repr(last_price))
+
 if last_price == str(price):
-    print("Price not changed. No message sent.")
+    print("Price not changed. Exiting without sending.")
     exit()
 
-
-# بروزرسانی فایل قیمت قبلی
 with open("last_price.txt", "w") as f:
     f.write(str(price))
 
-
-# ۴. ساخت قالب پیام
 message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
-
-🗓 {to_persian_number(date_text)} | {weekday}
-🕒 بروزرسانی: {to_persian_number(time_text)}
-
-💰 هر گرم: {to_persian_number(price_text)} تومان
-
-━━━━━━━━━━━━━━━
-طلای ماهان (اسکندری گلد)💎
-"""
-
-
-# ۵. ارسال به تلگرام
-try:
-    response = requests.post(
-        f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-        data={"chat_id": CHAT_ID, "text": message}
-    )
-    if response.status_code == 200:
-        print("Message sent successfully.")
-    else:
-        print(f"Telegram API Error: {response.text}")
-except Exception as e:
-    print(f"Network Error: {e}")
+🗓 {to_persian
