@@ -9,12 +9,10 @@ headers = {
 
 response = requests.get(url, headers=headers)
 
-print("Status:", response.status_code)
-
 soup = BeautifulSoup(response.text, "lxml")
 
-print(soup.title)
+text = soup.get_text()
 
-print("=" * 50)
+index = text.find("آخرین قیمت")
 
-print(soup.get_text()[:3000])
+print(text[index:index+1000])
