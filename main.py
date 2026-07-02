@@ -1,18 +1,31 @@
+import os
 import requests
-from bs4 import BeautifulSoup
 
-url = "https://www.tala.ir/price/18k"
+BOT_TOKEN = os.environ["BOT_TOKEN"]
+CHAT_ID = os.environ["CHAT_ID"]
 
-headers = {
-    "User-Agent": "Mozilla/5.0"
-}
+url = "http://et.tala.ir/webservice/haghanigold.com/6397dbw8333f095bb55cd539f865a994"
 
-response = requests.get(url, headers=headers)
+data = requests.get(url).json()
 
-soup = BeautifulSoup(response.text, "lxml")
+price = data["geram18"]["value"]
+time = data["serverTime"]
 
-text = soup.get_text()
+price_text = f"{price:,}"
 
-index = text.find("آخرین قیمت")
+message = f"""💰 قیمت طلای ۱۸ عیار
 
-print(text[index:index+1000])ُ
+💵 {price_text} ریال
+
+🕒 {time}
+"""
+
+requests.post(
+    f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+    data={
+        "chat_id": CHAT_ID,
+        "text": message
+    }
+)
+
+print("Message sent!")
