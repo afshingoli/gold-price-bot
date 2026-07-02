@@ -42,7 +42,10 @@ if not price:
 dt = datetime.strptime(server_time, "%Y-%m-%d %H:%M:%S")
 
 date_text = dt.strftime("%Y/%m/%d")
-time_text = dt.strftime("%H:%M")
+tfrom datetime import timezone, timedelta
+
+iran_time = dt.replace(tzinfo=timezone.utc) + timedelta(hours=3, minutes=30)
+time_text = iran_time.strftime("%H:%M")
 
 price_text = f"{price:,}"
 
