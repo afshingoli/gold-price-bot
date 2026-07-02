@@ -1,20 +1,46 @@
 import os
 import requests
+import jdatetime
+from datetime import datetime
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = os.environ["CHAT_ID"]
 
 API_URL = "http://et.tala.ir/webservice/haghanigold.com/6397dbw8333f095bb55cd539f865a994"
 
-# دریافت اطلاعات از API
+# تبدیل اعداد انگلیسی به فارسی
+def to_persian_number(text):
+    english = "0123456789"
+    persian = "۰۱۲۳۴۵۶۷۸۹"
+    return str(text).translate(str.maketrans(english, persian))
+
+# دریافت اطلاعات
 data = requests.get(API_URL).json()
 
-price = data["geram18"]["value"]      # ریال
-server_time = data["serverTime"]      # مثال: 2026-07-02 16:30:03
+price = data["geram18"]["value"] // 10  # تبدیل ریال به تومان
+server_time = data["serverTime"]        # مثال: 2026-07-02 16:30:03
 
-# تبدیل به تومان
-price_toman = price // 10
-price_text = f"{price_toman:,}"
+# تبدیل تاریخ میلادی API به شمسی
+dt = datetime.strptime(server_time, "%Y-%m-%d %H:%M:%S")
+jdt = jdatetime.datetime.fromgregorian(datetime=dt)
+
+months = [
+    "فروردین", "اردیبهشت", "خرداد",
+    "تیر", "مرداد", "شهریور",
+    "مهر", "آبان", "آذر",
+    "دی", "بهمن", "اسفند"
+]
+
+weekdays = [
+    "دوشنبه", "سه‌شنبه", "چهارشنبه",
+    "پنجشنبه", "جمعه", "شنبه", "یکشنبه"
+]
+
+date_text = f"{jdt.day} {months[jdt.month-1]} {jdt.year}"
+weekday = weekdays[jdt.weekday()]
+time_text = dt.strftime("%H:%M")
+
+price_text = f"{price:,}"
 
 # خواندن آخرین قیمت
 try:
@@ -32,14 +58,15 @@ if last_price == str(price):
 with open("last_price.txt", "w") as f:
     f.write(str(price))
 
-message = f"""💰 نرخ لحظه‌ای طلای ۱۸ عیار
+message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
 
-💵 {price_text} تومان
+🗓 {to_persian_number(date_text)} | {weekday}
+🕒 بروزرسانی: {to_persian_number(time_text)}
 
-📅 تاریخ و ساعت:
-{server_time}
+💰 هر گرم: {to_persian_number(price_text)} تومان
 
-💎 طلای ماهان (اسکندری گلد)
+━━━━━━━━━━━━━━━
+طلای ماهان (اسکندری گلد)💎
 """
 
 response = requests.post(
