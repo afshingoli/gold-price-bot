@@ -16,14 +16,14 @@ jobs:
         with:
           python-version: "3.11"
 
-      - run: pip install requests
+      # اضافه کردن jdatetime به لیست نصب‌ها
+      - run: pip install requests jdatetime tzdata
 
       - run: python main.py
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
 
-      # ⭐ این دقیقاً همون بخشیه که کم داشتی و فایل رو موندگار میکنه:
       - name: Save Last Price to GitHub
         run: |
           git config --global user.name "github-actions[bot]"

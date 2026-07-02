@@ -1,67 +1,75 @@
 import os
 import requests
-from datetime import datetime
+import jdatetime
 from zoneinfo import ZoneInfo
 
-# تنظیمات توکن و چت‌آیدی از محیط گیت‌هاب
-BOT_TOKEN = os.environ["BOT_TOKEN"]
-CHAT_ID = os.environ["CHAT_ID"]
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+CHAT_ID = os.environ.get("CHAT_ID")
 
 API_URL = "http://et.tala.ir/webservice/haghanigold.com/6397dbw8333f095bb55cd539f865a994"
 
-
 def to_persian_number(text):
-    """تبدیل اعداد انگلیسی به فارسی برای زیبایی پیام"""
-    return str(text).translate(str.maketrans(
-        "0123456789",
-        "۰۱۲۳۴۵۶۷۸۹"
-    ))
+    return str(text).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
 
-
-# ۱. گرفتن قیمت طلا از API
+# ۱. گرفتن قیمت
 try:
-    data = requests.get(API_URL, timeout=10).json()
+    headers = {'User-Agent': 'Mozilla/5.0'} # برای جلوگیری از بلاک شدن توسط سرورهای ایرانی
+    data = requests.get(API_URL, headers=headers, timeout=15).json()
     price = data["geram18"]["value"] // 10
     price_text = f"{price:,}"
 except Exception as e:
-    print(f"API ERROR: {e}")
+    print(f"❌ خطا در دریافت قیمت: {e}")
     exit()
 
+# ۲. گرفتن تاریخ و ساعت دقیق ایران (بسیار دقیق با jdatetime)
+ir_tz = ZoneInfo("Asia/Tehran")
+now = jdatetime.datetime.now(ir_tz)
 
-# ۲. محاسبه ساعت دقیق تهران
-now = datetime.now(ZoneInfo("Asia/Tehran"))
+date_str = now.strftime("%Y/%m/%d") # فرمت: 1403/04/11
+time_str = now.strftime("%H:%M:%S") # فرمت: 17:05:22
 
-weekdays = [
-    "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه", "یکشنبه"
-]
+weekdays = ["شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه"]
 weekday = weekdays[now.weekday()]
-time_text = now.strftime("%H:%M")
 
-
-# ۳. جلوگیری از ارسال پیام تکراری (منطق قیمت قبلی)
+# ۳. بررسی قیمت قبلی
 try:
     with open("last_price.txt", "r") as f:
         last_price = f.read().strip()
-except:
+except FileNotFoundError:
     last_price = ""
 
-# اگر قیمت تغییر نکرده باشد، کد اینجا متوقف می‌شود
-if last_price == str(price):
-    print(f"No change in price ({price} Tomans). Script stopped.")
-    exit()
+# ⚠️ موقتاً شرط توقف رو کامنت کردم تا ربات حتماً برات پیام بفرسته و بتونی ساعت رو تست کنی
+# بعداً که خیالت راحت شد، می‌تونی علامت‌های # رو از ۳ خط پایین برداری:
+# if last_price == str(price):
+#     print("✅ ربات اجرا شد ولی چون قیمت طلا تغییری نکرده، پیامی ارسال نشد.")
+#     exit()
 
-# اگر قیمت جدید بود، آن را در فایل ذخیره می‌کند
+# بروزرسانی فایل قیمت
 with open("last_price.txt", "w") as f:
     f.write(str(price))
 
-
-# ۴. ساخت متن پیام نهایی
+# ۴. ساخت متن پیام
 message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
 
-🗓 {weekday}
-🕒 بروزرسانی: {to_persian_number(time_text)}
+🗓 {weekday} | {to_persian_number(date_str)}
+🕒 بروزرسانی: {to_persian_number(time_str)}
 
 💰 هر گرم: {to_persian_number(price_text)} تومان
 
 ━━━━━━━━━━━━━━━
-طلای ماهان (اس
+طلای ماهان (اسکندری گلد)💎
+"""
+
+# ۵. ارسال به تلگرام
+try:
+    res = requests.post(
+        f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+        data={"chat_id": CHAT_ID, "text": message},
+        timeout=10
+    )
+    if res.status_code == 200:
+        print("🚀 پیام با موفقیت به تلگرام ارسال شد!")
+    else:
+        print(f"❌ خطا از سمت تلگرام: {res.text}")
+except Exception as e:
+    print(f"❌ خطای ارسال: {e}")
