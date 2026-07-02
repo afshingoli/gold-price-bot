@@ -1,4 +1,5 @@
 import requests
+from bs4 import BeautifulSoup
 
 url = "https://www.tala.ir/price/18k"
 
@@ -8,5 +9,12 @@ headers = {
 
 response = requests.get(url, headers=headers)
 
-print("Status Code:", response.status_code)
-print(response.text[:1000])
+print("Status:", response.status_code)
+
+soup = BeautifulSoup(response.text, "lxml")
+
+print(soup.title)
+
+print("=" * 50)
+
+print(soup.get_text()[:3000])
