@@ -2,8 +2,8 @@ name: Gold Price Bot
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
-  workflow_dispatch:
+    - cron: "*/5 * * * *" # اجرای خودکار هر ۵ دقیقه
+  workflow_dispatch: # امکان اجرای دستی از سایت گیت‌هاب
 
 jobs:
   run:
@@ -16,18 +16,19 @@ jobs:
         with:
           python-version: "3.11"
 
-      # اضافه کردن jdatetime به لیست نصب‌ها
-      - run: pip install requests jdatetime tzdata
+      - name: Install Dependencies
+        run: pip install requests jdatetime tzdata
 
-      - run: python main.py
+      - name: Run Python Script
+        run: python main.py
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
 
-      - - name: Save Last Price to GitHub
+      # بخش اصلاح شده برای حل مشکل تداخل و ارور کامیت
+      - name: Save Last Price to GitHub
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add last_price.txt
-          # اضافه شدن دستور pull --rebase برای حل تداخل
           git diff --quiet && git diff --staged --quiet || (git commit -m "📊 Update last price" && git pull --rebase origin main && git push origin main)

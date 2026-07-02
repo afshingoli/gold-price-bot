@@ -3,7 +3,7 @@ import requests
 import jdatetime
 from zoneinfo import ZoneInfo
 
-# ۱. تنظیمات توکن و چت‌آیدی از محیط گیت‌هاب
+# ۱. دریافت توکن‌ها از محیط گیت‌هاب
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
@@ -30,8 +30,8 @@ except Exception as e:
 ir_tz = ZoneInfo("Asia/Tehran")
 now = jdatetime.datetime.now(ir_tz)
 
-date_str = now.strftime("%Y/%m/%d")  # خروجی مثل: ۱۴۰۵/۰۴/۱۱
-time_str = now.strftime("%H:%M:%S")  # خروجی مثل: ۱۷:۰۵:۲۲
+date_str = now.strftime("%Y/%m/%d")  # مثل: ۱۴۰۵/۰۴/۱۱
+time_str = now.strftime("%H:%M:%S")  # مثل: ۱۷:۰۵:۲۲
 
 weekdays = ["شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه"]
 weekday = weekdays[now.weekday()]
@@ -44,12 +44,12 @@ try:
 except FileNotFoundError:
     last_price = ""
 
-# 🔒 اگر نرخ طلا تغییر نکرده باشد، ربات همین‌جا متوقف می‌شود و پیام نمی‌فرستد
+# 🔒 اگر نرخ طلا تغییر نکرده باشد، ربات متوقف می‌شود
 if last_price == str(price):
     print(f"✅ نرخ طلا تغییری نکرده ({price} تومان). پیامی ارسال نشد.")
     exit()
 
-# اگر نرخ جدید بود، آن را برای دفعات بعدی ذخیره می‌کند
+# اگر نرخ جدید بود، آن را ذخیره می‌کند
 with open("last_price.txt", "w") as f:
     f.write(str(price))
 
