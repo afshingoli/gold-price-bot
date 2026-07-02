@@ -47,8 +47,7 @@ except FileNotFoundError:
 # 🔒 اگر نرخ طلا تغییر نکرده باشد، ربات متوقف می‌شود
 if last_price == str(price):
     print(f"✅ نرخ طلا تغییری نکرده ({price} تومان). پیامی ارسال نشد.")
-    exit()
-
+    pass # 👈 موقتاً این رو بذار تا از شرط عبور کنه
 # اگر نرخ جدید بود، آن را ذخیره می‌کند
 with open("last_price.txt", "w") as f:
     f.write(str(price))
