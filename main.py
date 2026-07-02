@@ -1,7 +1,6 @@
 import os
 import requests
 from datetime import datetime
-import jdatetime
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = os.environ["CHAT_ID"]
@@ -16,13 +15,6 @@ def to_persian_number(text):
     ))
 
 
-# ماه‌ها
-months = [
-    "فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور",
-    "مهر","آبان","آذر","دی","بهمن","اسفند"
-]
-
-# روزهای هفته
 weekdays = [
     "دوشنبه","سه‌شنبه","چهارشنبه","پنجشنبه","جمعه","شنبه","یکشنبه"
 ]
@@ -31,25 +23,22 @@ weekdays = [
 # گرفتن قیمت
 try:
     data = requests.get(API_URL, timeout=10).json()
-except Exception as e:
-    print("API ERROR:", e)
+except:
+    print("API ERROR")
     exit()
-
 
 price = data["geram18"]["value"] // 10
 price_text = f"{price:,}"
 
 
-# ⬅️ مهم: تاریخ و ساعت واقعی ایران (بدون API و بدون serverTime)
+# فقط زمان سیستم (بدون API، بدون jdatetime، بدون خراب شدن)
 now = datetime.now()
-jnow = jdatetime.datetime.fromgregorian(datetime=now)
 
-date_text = f"{jnow.day} {months[jnow.month-1]} {jnow.year}"
-weekday = weekdays[jnow.weekday()]
+weekday = weekdays[now.weekday()]
 time_text = now.strftime("%H:%M")
 
 
-# جلوگیری از پیام تکراری
+# جلوگیری از ارسال تکراری
 try:
     with open("last_price.txt", "r") as f:
         last_price = f.read().strip()
@@ -64,10 +53,9 @@ with open("last_price.txt", "w") as f:
     f.write(str(price))
 
 
-# پیام نهایی
 message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
 
-🗓 {to_persian_number(date_text)} | {weekday}
+🗓 {weekday}
 🕒 بروزرسانی: {to_persian_number(time_text)}
 
 💰 هر گرم: {to_persian_number(price_text)} تومان
@@ -77,8 +65,7 @@ message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
 """
 
 
-# ارسال تلگرام
-res = requests.post(
+requests.post(
     f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
     data={
         "chat_id": CHAT_ID,
@@ -86,5 +73,4 @@ res = requests.post(
     }
 )
 
-print("STATUS:", res.status_code)
-print(res.text)
+print("Done")
