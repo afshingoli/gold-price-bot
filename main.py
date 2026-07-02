@@ -1,9 +1,9 @@
 import os
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-CHAT_ID = os.environ.get("CHAT_ID")
+BOT_TOKEN = os.environ["BOT_TOKEN"]
+CHAT_ID = os.environ["CHAT_ID"]
 
 API_URL = "http://et.tala.ir/webservice/haghanigold.com/6397dbw8333f095bb55cd539f865a994"
 
@@ -15,42 +15,46 @@ def to_persian_number(text):
     ))
 
 
-def safe_request(url):
-    try:
-        r = requests.get(url, timeout=10)
-        return r.json()
-    except Exception as e:
-        print("API ERROR:", e)
-        return None
+# ماه‌ها
+months = [
+    "فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور",
+    "مهر","آبان","آذر","دی","بهمن","اسفند"
+]
+
+# روزهای هفته (ثابت درست)
+weekdays = [
+    "دوشنبه","سه‌شنبه","چهارشنبه","پنجشنبه","جمعه","شنبه","یکشنبه"
+]
 
 
-data = safe_request(API_URL)
+# گرفتن دیتا
+data = requests.get(API_URL, timeout=10).json()
 
-if not data:
-    print("No data from API")
-    exit()
-
-
-price = data.get("geram18", {}).get("value", 0) // 10
-server_time = data.get("serverTime", "")
-
-if not price:
-    print("Price not found")
-    exit()
-
-
-dt = datetime.strptime(server_time, "%Y-%m-%d %H:%M:%S")
-
-date_text = dt.strftime("%Y/%m/%d")
-tfrom datetime import timezone, timedelta
-
-iran_time = dt.replace(tzinfo=timezone.utc) + timedelta(hours=3, minutes=30)
-time_text = iran_time.strftime("%H:%M")
-
+price = data["geram18"]["value"] // 10
 price_text = f"{price:,}"
 
+server_time = data["serverTime"]
 
-# جلوگیری از ارسال تکراری
+
+# تبدیل زمان API به UTC
+dt_utc = datetime.strptime(server_time, "%Y-%m-%d %H:%M:%S").replace(
+    tzinfo=timezone.utc
+)
+
+# تبدیل به ساعت ایران (UTC+3:30)
+iran_time = dt_utc + timedelta(hours=3, minutes=30)
+
+# تاریخ شمسی واقعی با جلالی بر اساس زمان ایران
+import jdatetime
+jdt = jdatetime.datetime.fromgregorian(datetime=iran_time)
+
+
+date_text = f"{jdt.day} {months[jdt.month-1]} {jdt.year}"
+weekday = weekdays[iran_time.weekday()]
+time_text = iran_time.strftime("%H:%M")
+
+
+# کنترل تغییر قیمت
 try:
     with open("last_price.txt", "r") as f:
         last_price = f.read().strip()
@@ -61,14 +65,13 @@ if last_price == str(price):
     print("No change")
     exit()
 
-
 with open("last_price.txt", "w") as f:
     f.write(str(price))
 
 
 message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
 
-🗓 {to_persian_number(date_text)}
+🗓 {to_persian_number(date_text)} | {weekday}
 🕒 بروزرسانی: {to_persian_number(time_text)}
 
 💰 هر گرم: {to_persian_number(price_text)} تومان
@@ -80,11 +83,8 @@ message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
 
 res = requests.post(
     f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-    data={
-        "chat_id": CHAT_ID,
-        "text": message
-    }
+    data={"chat_id": CHAT_ID, "text": message}
 )
 
 print("STATUS:", res.status_code)
-print("RESPONSE:", res.text)
+print(res.text)
