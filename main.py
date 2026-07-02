@@ -32,8 +32,7 @@ months = {
     12: "اسفند",
 }
 
-# روزهای هفته
-weekdays = {
+weekday_names = {
     0: "دوشنبه",
     1: "سه‌شنبه",
     2: "چهارشنبه",
@@ -41,6 +40,7 @@ weekdays = {
     4: "جمعه",
     5: "شنبه",
     6: "یکشنبه",
+}
 }
 
 
@@ -53,7 +53,7 @@ dt = datetime.strptime(server_time, "%Y-%m-%d %H:%M:%S")
 jdt = jdatetime.datetime.fromgregorian(datetime=dt)
 
 date_text = f"{jdt.day} {months[jdt.month]} {jdt.year}"
-weekday = weekdays[jdt.weekday()]
+weekday = weekday_names[dt.weekday()]
 time_text = dt.strftime("%H:%M")
 
 price_text = f"{price:,}"
