@@ -1,60 +1,100 @@
 import os
+import re
 import requests
 import jdatetime
+from bs4 import BeautifulSoup
 from zoneinfo import ZoneInfo
 
-# ۱. دریافت توکن‌ها از محیط گیت‌هاب
+# ۱. تنظیمات توکن و چت‌آیدی از محیط گیت‌هاب
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
-API_URL = "http://et.tala.ir/webservice/haghanigold.com/6397dbw8333f095bb55cd539f865a994"
+# کانال منبع: اتحادیه طلا و جواهر مشهد
+SOURCE_CHANNEL = "etjmir" 
 
 
 def to_persian_number(text):
     """تبدیل اعداد انگلیسی به فارسی برای زیبایی متن پیام"""
     return str(text).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
 
+def fa_to_en_number(text):
+    """تبدیل اعداد فارسی به انگلیسی برای پردازش محاسباتی"""
+    return str(text).translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
 
-# ۲. دریافت قیمت طلا از API
+
+# ۲. خواندن آخرین پیام از کانال منبع (تلگرام وب)
 try:
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    data = requests.get(API_URL, headers=headers, timeout=15).json()
-    price = data["geram18"]["value"] // 10
-    price_text = f"{price:,}"
+    url = f"https://t.me/s/{SOURCE_CHANNEL}"
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    res = requests.get(url, headers=headers, timeout=15)
+    soup = BeautifulSoup(res.text, "html.parser")
+    
+    # پیدا کردن باکس‌های پیام کانال
+    messages = soup.find_all("div", class_="tgme_widget_message_text js-message_text")
+    if not messages:
+        print("❌ پیامی در کانال پیدا نشد یا ساختار صفحه وب تلگرام تغییر کرده است.")
+        exit()
+        
+    # گرفتن متن آخرین پیام ارسال شده در کانال
+    latest_message = messages[-1].get_text()
+    print("📰 متن آخرین پیام کانال منبع:\n", latest_message)
 except Exception as e:
-    print(f"❌ خطا در دریافت قیمت: {e}")
+    print(f"❌ خطا در خواندن کانال تلگرام: {e}")
     exit()
 
 
-# ۳. محاسبه تاریخ شمسی و ساعت دقیق تهران
+# ۳. استخراج هوشمند قیمت طلای ۱۸ عیار از بین متن پیام
+price = None
+cleaned_text = fa_to_en_number(latest_message) # یکدست‌سازی اعداد
+
+for line in cleaned_text.split("\n"):
+    # جستجو در خطوطی که مربوط به طلای ۱۸ عیار یا هر گرم طلا هستند
+    if "18" in line or "۱۸" in line or "گرم" in line:
+        # حذف کاما، ویرگول و فاصله‌ها برای استخراج خالص عدد قیمت
+        line_cleaned = line.replace(",", "").replace("،", "").replace(" ", "")
+        # پیدا کردن اعداد ۶ تا ۸ رقمی (قیمت طلا به ریال یا تومان)
+        numbers = re.findall(r'\d{6,8}', line_cleaned)
+        if numbers:
+            price = int(numbers[0])
+            # اگر قیمت به ریال بود (مثلاً بالای ۱۰ میلیون بود)، تبدیلش میکنه به تومان
+            if price > 10000000:
+                price = price // 10
+            break
+
+if not price:
+    print("❌ فرمول نتوانست قیمت ۱۸ عیار را از متن پیام استخراج کند.")
+    print("💡 نکته: اگر پیام آخر کانال متنی غیر از قیمت (مثل اطلاعیه) باشد، این خطا طبیعی است.")
+    exit()
+
+price_text = f"{price:,}"
+
+
+# ۴. محاسبه تاریخ شمسی و ساعت دقیق تهران
 ir_tz = ZoneInfo("Asia/Tehran")
 now = jdatetime.datetime.now(ir_tz)
-
-date_str = now.strftime("%Y/%m/%d")  # خروجی مثل: ۱۴۰۵/۰۴/۱۱
-time_str = now.strftime("%H:%M:%S")  # خروجی مثل: ۱۷:۰۵:۲۲
+date_str = now.strftime("%Y/%m/%d")
+time_str = now.strftime("%H:%M:%S")
 
 weekdays = ["شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه"]
 weekday = weekdays[now.weekday()]
 
 
-# ۴. بررسی قیمت قبلی (جلوگیری از ارسال پیام تکراری)
+# ۵. بررسی تکراری نبودن قیمت (ترمز هوشمند)
 try:
     with open("last_price.txt", "r") as f:
         last_price = f.read().strip()
 except FileNotFoundError:
     last_price = ""
 
-# 🔒 ترمز هوشمند: اگر نرخ طلا تغییر نکرده باشد، ربات همین‌جا متوقف می‌شود
 if last_price == str(price):
     print(f"✅ نرخ طلا تغییری نکرده ({price} تومان). پیامی ارسال نشد.")
     exit()
 
-# اگر نرخ جدید بود، آن را برای دفعات بعدی ذخیره می‌کند
 with open("last_price.txt", "w") as f:
     f.write(str(price))
 
 
-# ۵. ساخت متن پیام نهایی
+# ۶. ساخت متن پیام برای کانال شما
 message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
 
 🗓 {weekday} | {to_persian_number(date_str)}
@@ -67,7 +107,7 @@ message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
 """
 
 
-# ۶. ارسال پیام به تلگرام
+# ۷. ارسال به کانال خودت
 try:
     res = requests.post(
         f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
@@ -75,8 +115,8 @@ try:
         timeout=10
     )
     if res.status_code == 200:
-        print("🚀 نرخ جدید بود و پیام با موفقیت به تلگرام ارسال شد!")
+        print("🚀 قیمت از کانال اتحادیه مشهد گرفته شد و با موفقیت به کانال شما ارسال شد!")
     else:
         print(f"❌ خطا از سمت تلگرام: {res.text}")
 except Exception as e:
-    print(f"❌ خطای شبکه در ارسال به تلگرام: {e}")
+    print(f"❌ خطای شبکه: {e}")
