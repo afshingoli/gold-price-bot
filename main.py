@@ -1,11 +1,11 @@
 import os
 import requests
+from datetime import datetime
 
-BOT_TOKEN = os.environ["BOT_TOKEN"]
-CHAT_ID = os.environ["CHAT_ID"]
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+CHAT_ID = os.environ.get("CHAT_ID")
 
-PRICE_API = "http://et.tala.ir/webservice/haghanigold.com/6397dbw8333f095bb55cd539f865a994"
-TIME_API = "https://api.keybit.ir/time/"
+API_URL = "http://et.tala.ir/webservice/haghanigold.com/6397dbw8333f095bb55cd539f865a994"
 
 
 def to_persian_number(text):
@@ -15,30 +15,47 @@ def to_persian_number(text):
     ))
 
 
-# گرفتن قیمت
-data = requests.get(PRICE_API).json()
-price = data["geram18"]["value"] // 10
+def safe_request(url):
+    try:
+        r = requests.get(url, timeout=10)
+        return r.json()
+    except Exception as e:
+        print("API ERROR:", e)
+        return None
+
+
+data = safe_request(API_URL)
+
+if not data:
+    print("No data from API")
+    exit()
+
+
+price = data.get("geram18", {}).get("value", 0) // 10
+server_time = data.get("serverTime", "")
+
+if not price:
+    print("Price not found")
+    exit()
+
+
+dt = datetime.strptime(server_time, "%Y-%m-%d %H:%M:%S")
+
+date_text = dt.strftime("%Y/%m/%d")
+time_text = dt.strftime("%H:%M")
+
 price_text = f"{price:,}"
 
 
-# گرفتن تاریخ دقیق شمسی (کاملاً درست)
-tdata = requests.get(TIME_API).json()["date"]
-
-date_text = tdata["full"]["official"]["iso"]["date"]["persian"]
-weekday = tdata["week_day"]["name"]
-time_text = tdata["time24"]["full"][:5]
-
-
-# چک قیمت قبلی
+# جلوگیری از ارسال تکراری
 try:
     with open("last_price.txt", "r") as f:
         last_price = f.read().strip()
 except:
     last_price = ""
 
-
 if last_price == str(price):
-    print("Price not changed.")
+    print("No change")
     exit()
 
 
@@ -48,7 +65,7 @@ with open("last_price.txt", "w") as f:
 
 message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
 
-🗓 {to_persian_number(date_text)} | {weekday}
+🗓 {to_persian_number(date_text)}
 🕒 بروزرسانی: {to_persian_number(time_text)}
 
 💰 هر گرم: {to_persian_number(price_text)} تومان
@@ -58,9 +75,13 @@ message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
 """
 
 
-requests.post(
+res = requests.post(
     f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-    data={"chat_id": CHAT_ID, "text": message}
+    data={
+        "chat_id": CHAT_ID,
+        "text": message
+    }
 )
 
-print("Done")
+print("STATUS:", res.status_code)
+print("RESPONSE:", res.text)
