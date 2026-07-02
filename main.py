@@ -47,8 +47,4 @@ if last_price == str(price):
     print("Price not changed. Exiting without sending.")
     exit()
 
-with open("last_price.txt", "w") as f:
-    f.write(str(price))
-
-message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
-🗓 {to_persian
+with open("last_price.txt",
