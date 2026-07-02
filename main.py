@@ -22,7 +22,16 @@ data = requests.get(API_URL).json()
 price = data["geram18"]["value"] // 10
 price_text = f"{price:,}"
 
-now = datetime.now()
+from datetime import datetime, timedelta
+
+now_utc = datetime.utcnow()
+iran_time = now_utc + timedelta(hours=3, minutes=30)
+
+weekday = [
+    "دوشنبه","سه‌شنبه","چهارشنبه","پنجشنبه","جمعه","شنبه","یکشنبه"
+][iran_time.weekday()]
+
+time_text = iran_time.strftime("%H:%M")
 
 weekday = weekdays[now.weekday()]
 time_text = now.strftime("%H:%M")
