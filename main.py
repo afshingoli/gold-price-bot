@@ -9,42 +9,65 @@ CHAT_ID = os.environ["CHAT_ID"]
 API_URL = "http://et.tala.ir/webservice/haghanigold.com/6397dbw8333f095bb55cd539f865a994"
 
 
-# تبدیل اعداد انگلیسی به فارسی
 def to_persian_number(text):
-    english = "0123456789"
-    persian = "۰۱۲۳۴۵۶۷۸۹"
-    return str(text).translate(str.maketrans(english, persian))
+    return str(text).translate(str.maketrans(
+        "0123456789",
+        "۰۱۲۳۴۵۶۷۸۹"
+    ))
 
 
-# دریافت اطلاعات
+# ماه‌ها
+months = {
+    1: "فروردین",
+    2: "اردیبهشت",
+    3: "خرداد",
+    4: "تیر",
+    5: "مرداد",
+    6: "شهریور",
+    7: "مهر",
+    8: "آبان",
+    9: "آذر",
+    10: "دی",
+    11: "بهمن",
+    12: "اسفند",
+}
+
+# روزهای هفته
+weekdays = {
+    0: "دوشنبه",
+    1: "سه‌شنبه",
+    2: "چهارشنبه",
+    3: "پنجشنبه",
+    4: "جمعه",
+    5: "شنبه",
+    6: "یکشنبه",
+}
+
+
 data = requests.get(API_URL).json()
 
 price = data["geram18"]["value"] // 10
 server_time = data["serverTime"]
 
-# تبدیل زمان API به شمسی
 dt = datetime.strptime(server_time, "%Y-%m-%d %H:%M:%S")
 jdt = jdatetime.datetime.fromgregorian(datetime=dt)
 
-date_text = jdt.strftime("%d %B %Y")
-weekday = jdt.strftime("%A")
-time_text = jdt.strftime("%H:%M")
+date_text = f"{jdt.day} {months[jdt.month]} {jdt.year}"
+weekday = weekdays[jdt.weekday()]
+time_text = dt.strftime("%H:%M")
 
 price_text = f"{price:,}"
 
-# خواندن آخرین قیمت
 try:
     with open("last_price.txt", "r") as f:
         last_price = f.read().strip()
 except:
     last_price = ""
 
-# اگر قیمت تغییر نکرد، پیام ارسال نکن
 if last_price == str(price):
     print("Price not changed.")
     exit()
 
-# ذخیره قیمت جدید
 with open("last_price.txt", "w") as f:
     f.write(str(price))
 
@@ -67,7 +90,4 @@ response = requests.post(
     }
 )
 
-if response.status_code == 200:
-    print("Message sent!")
-else:
-    print("Telegram Error:", response.text)
+print(response.text)
