@@ -24,6 +24,8 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
+          EITAA_TOKEN: ${{ secrets.EITAA_TOKEN }}
+          EITAA_CHAT_ID: ${{ secrets.EITAA_CHAT_ID }}
 
       - name: Save Last Price to GitHub
         run: |
