@@ -1,6 +1,6 @@
 import os
 import requests
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = os.environ["CHAT_ID"]
@@ -15,46 +15,40 @@ def to_persian_number(text):
     ))
 
 
-# ماه‌ها
 months = [
     "فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور",
     "مهر","آبان","آذر","دی","بهمن","اسفند"
 ]
 
-# روزهای هفته (ثابت درست)
 weekdays = [
     "دوشنبه","سه‌شنبه","چهارشنبه","پنجشنبه","جمعه","شنبه","یکشنبه"
 ]
 
 
-# گرفتن دیتا
-data = requests.get(API_URL, timeout=10).json()
+try:
+    data = requests.get(API_URL, timeout=10).json()
+except Exception as e:
+    print("API ERROR:", e)
+    exit()
+
 
 price = data["geram18"]["value"] // 10
-price_text = f"{price:,}"
-
 server_time = data["serverTime"]
 
-
-# تبدیل زمان API به UTC
-dt_utc = datetime.strptime(server_time, "%Y-%m-%d %H:%M:%S").replace(
-    tzinfo=timezone.utc
-)
-
-# تبدیل به ساعت ایران (UTC+3:30)
-iran_time = dt_utc + timedelta(hours=3, minutes=30)
-
-# تاریخ شمسی واقعی با جلالی بر اساس زمان ایران
-import jdatetime
-jdt = jdatetime.datetime.fromgregorian(datetime=iran_time)
+dt = datetime.strptime(server_time, "%Y-%m-%d %H:%M:%S")
 
 
-date_text = f"{jdt.day} {months[jdt.month-1]} {jdt.year}"
-weekday = weekdays[iran_time.weekday()]
-time_text = iran_time.strftime("%H:%M")
+# فقط برای ایران (بدون timezone دردسر)
+iran_dt = dt  # چون serverTime تقریباً ایرانیه در این API
+
+date_text = f"{iran_dt.day} {months[iran_dt.month-1]} {iran_dt.year}"
+weekday = weekdays[iran_dt.weekday()]
+time_text = iran_dt.strftime("%H:%M")
+
+price_text = f"{price:,}"
 
 
-# کنترل تغییر قیمت
+# جلوگیری از ارسال تکراری
 try:
     with open("last_price.txt", "r") as f:
         last_price = f.read().strip()
