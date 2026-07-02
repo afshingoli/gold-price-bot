@@ -3,6 +3,9 @@ name: Gold Price Bot
 on:
   workflow_dispatch:
 
+  schedule:
+    - cron: "*/5 * * * *"
+
 jobs:
   run:
     runs-on: ubuntu-latest
