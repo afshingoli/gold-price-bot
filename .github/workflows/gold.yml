@@ -1,17 +1,13 @@
-name: Gold Price Bot
+name: Daily Summary Bot
 
 on:
-  push:
-    branches:
-      - main
-      - master
   schedule:
-    # این یعنی ربات هر ۱۵ دقیقه یک‌بار اتوماتیک اجرا میشه
-    - cron: '*/15 * * * *'
-  workflow_dispatch: # 👈 اضافه شدن این خط، دکمه Run workflow رو توی گیت‌هاب ظاهر می‌کنه
+    # ساعت ۲۱:۰۰ شب به وقت ایران (۱۷:۳۰ به وقت UTC)
+    - cron: '30 17 * * *'
+  workflow_dispatch: # دکمه اجرای دستی
 
 jobs:
-  run-bot:
+  run-summary:
     runs-on: ubuntu-latest
 
     steps:
@@ -28,18 +24,19 @@ jobs:
         pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Run Bot Script
+    - name: Run Summary Script
       env:
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         CHAT_ID: ${{ secrets.CHAT_ID }}
         EITAA_TOKEN: ${{ secrets.EITAA_TOKEN }}
         EITAA_CHAT_ID: ${{ secrets.EITAA_CHAT_ID }}
+        MODE: "summary" # به بات میگه الان وقت گزارش روزانه‌ست
       run: python main.py
 
     - name: Save changes
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git add last_price.txt daily_prices.txt || true
-        git commit -m "Update last price [skip ci]" || true
+        git add daily_prices.txt || true
+        git commit -m "Reset daily prices for tomorrow [skip ci]" || true
         git push || true
