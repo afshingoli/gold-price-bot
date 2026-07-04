@@ -1,69 +1,70 @@
 import os
 import requests
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
 # تنظیم توکن‌ها و آیدی‌ها از سکرت‌های گیت‌هاب
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = os.environ["CHAT_ID"]
 
-# متغیرهای ایتا (اگر در گیت‌هاب ست کرده باشی خودکار کار می‌کنند)
+# متغیرهای ایتا (اگر ست کرده باشی خودکار ارسال می‌شود)
 EITAA_TOKEN = os.environ.get("EITAA_TOKEN")
 EITAA_CHAT_ID = os.environ.get("EITAA_CHAT_ID")
 
-API_URL = "http://et.tala.ir/webservice/haghanigold.com/6397dbw8333f095bb55cd539f865a994"
+PRICE_API = "http://et.tala.ir/webservice/haghanigold.com/6397dbw8333f095bb55cd539f865a994"
+TIME_API = "https://api.keybit.ir/time/"
 
 def to_persian_number(text):
     return str(text).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
 
 # ۱. گرفتن قیمت لحظه‌ای از API
 try:
-    data = requests.get(API_URL, timeout=10).json()
+    data = requests.get(PRICE_API, timeout=10).json()
+    price = data["geram18"]["value"] // 10
+    price_text = f"{price:,}"
 except Exception as e:
-    print("API ERROR:", e)
+    print("API PRICE ERROR:", e)
     exit()
 
-price = data["geram18"]["value"] // 10
-price_text = f"{price:,}"
+# ۲. گرفتن تاریخ و زمان شمسی دقیق (اصلاح شده و بدون کرش)
+try:
+    time_response = requests.get(TIME_API, timeout=10).json()
+    date_text = time_response["date"]["full"]["official"]["iso"]["date"]["persian"]  # مثل: 1402/08/25
+    weekday = time_response["week_day"]["name"]  # مثل: پنجشنبه
+    time_text = time_response["time24"]["full"][:5]  # مثل: 20:15
+    hour_now = int(time_response["time24"]["hour"])  # ساعت فعلی ایران برای گزارش شبانه
+except Exception as e:
+    print("API TIME ERROR:", e)
+    exit()
 
-# محاسبه زمان و تاریخ دقیق تهران
-now = datetime.now(ZoneInfo("Asia/Tehran"))
-weekdays = ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه", "یکشنبه"]
-weekday = weekdays[now.weekday()]
-time_text = now.strftime("%H:%M")
-today_str = now.strftime("%Y-%m-%d")
-
-# 📊 ۲. ذخیره قیمت در آرشیو روزانه (برای محاسبه سوابق امروز)
+# ۳. ذخیره قیمت در آرشیو روزانه برای خلاصه وضعیت
 try:
     with open("daily_prices.txt", "a") as f:
         f.write(f"{price}\n")
 except Exception as e:
     print("Error saving daily price:", e)
 
-# 📈 ۳. منطق ارسال گزارش خلاصه وضعیت پایان روز (ساعت ۸ شب به بعد)
 try:
     with open("last_summary_date.txt", "r") as f:
         last_summary = f.read().strip()
 except:
     last_summary = ""
 
-# اگر ساعت از ۲۰ (۸ شب) گذشته بود و امروز هنوز گزارش پایانی نفرستاده بودیم
-if now.hour >= 0 and last_summary != today_str:
+# 📊 ۴. منطق ارسال گزارش خلاصه وضعیت پایان روز (ساعت ۸ شب به بعد)
+# نکته: برای تست فوری می‌توانید موقتاً عدد 20 را به 0 تغییر دهید
+if hour_now >= 20 and last_summary != date_text:
     try:
         with open("daily_prices.txt", "r") as f:
             lines = f.readlines()
         
-        # تبدیل خطوط فایل به اعداد صحیح
         prices = [int(line.strip()) for line in lines if line.strip().isdigit()]
         
         if prices:
-            open_p = prices[0]       # اولین قیمت ثبت شده در روز
-            high_p = max(prices)     # بالاترین قیمت روز
-            low_p = min(prices)      # پایین‌ترین قیمت روز
-            close_p = prices[-1]     # آخرین قیمت روز (قیمت پایانی)
+            open_p = prices[0]       # نرخ شروع
+            high_p = max(prices)     # بالاترین نرخ
+            low_p = min(prices)      # پایین‌ترین نرخ
+            close_p = prices[-1]     # نرخ پایانی
             
             summary_message = f"""📊 گزارش خلاصه وضعیت بازار امروز
-🗓 {weekday} | {to_persian_number(now.strftime("%Y/%m/%d"))}
+🗓 {to_persian_number(date_text)} | {weekday}
 🕒 ساعت انتشار: {to_persian_number(time_text)}
 
 🔹 نرخ شروع بازار: {to_persian_number(f"{open_p:,}")} تومان
@@ -74,55 +75,16 @@ if now.hour >= 0 and last_summary != today_str:
 ━━━━━━━━━━━━━━━
 طلای ماهان (اسکندری گلد)💎"""
             
-            # ارسال گزارش به تلگرام
+            # ارسال خلاصه به تلگرام
             requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data={"chat_id": CHAT_ID, "text": summary_message})
             
-            # ارسال گزارش به ایتا
+            # ارسال خلاصه به ایتا
             if EITAA_TOKEN and EITAA_CHAT_ID:
                 requests.post(f"https://eitaayar.ir/api/{EITAA_TOKEN}/sendMessage", data={"chat_id": EITAA_CHAT_ID, "text": summary_message})
                 
             print("✅ گزارش خلاصه وضعیت روزانه با موفقیت ارسال شد.")
             
-            # خالی کردن فایل قیمت‌های روزانه برای شروع دیتای فردا
+            # خالی کردن فایل قیمت‌ها برای فردا و ثبت تاریخ امروز
             with open("daily_prices.txt", "w") as f:
                 f.write("")
-                
-            # ثبت تاریخ امروز برای اینکه دوباره ارسال نشود
-            with open("last_summary_date.txt", "w") as f:
-                f.write(today_str)
-                
-    except Exception as e:
-        print("Error in generating summary:", e)
-
-# 🛑 ۴. منطق جلوگیری از ارسال قیمت تکراری (برای پیام‌های ۵ دقیقه‌ای معمولی)
-try:
-    with open("last_price.txt", "r") as f:
-        last_price = f.read().strip()
-except:
-    last_price = ""
-
-# اگر قیمت تغییری نکرده باشد، اسکریپت در این مرحله متوقف می‌شود
-if last_price == str(price):
-    print("No price change for regular update.")
-    exit()
-
-# ذخیره قیمت جدید برای مقایسه در ۵ دقیقه بعدی
-with open("last_price.txt", "w") as f:
-    f.write(str(price))
-
-# متن پیام نرخ لحظه‌ای معمولی
-message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
-🗓 {weekday}
-🕒 بروزرسانی: {to_persian_number(time_text)}
-💰 هر گرم: {to_persian_number(price_text)} تومان
-━━━━━━━━━━━━━━━
-طلای ماهان (اسکندری گلد)💎"""
-
-# ارسال پیام معمولی به تلگرام
-requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data={"chat_id": CHAT_ID, "text": message})
-
-# ارسال پیام معمولی به ایتا
-if EITAA_TOKEN and EITAA_CHAT_ID:
-    requests.post(f"https://eitaayar.ir/api/{EITAA_TOKEN}/sendMessage", data={"chat_id": EITAA_CHAT_ID, "text": message})
-
-print("✅ پیام نرخ لحظه‌ای ارسال شد.")
+            with open("last
