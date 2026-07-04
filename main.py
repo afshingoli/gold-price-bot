@@ -10,7 +10,7 @@ CHAT_ID = os.environ["CHAT_ID"]
 EITAA_TOKEN = os.environ.get("EITAA_TOKEN")
 EITAA_CHAT_ID = os.environ.get("EITAA_CHAT_ID")
 
-# آیدی کانال تلگرام اتحادیه
+# آیدی کانال تلگرام اتحادیه مشهد
 CHANNEL_USERNAME = "etjmir" 
 
 def to_persian_number(text):
@@ -50,29 +50,30 @@ try:
     # گشتن بین آخرین پیام‌ها برای پیدا کردن نرخ طلای ۱۸ عیار
     for msg in reversed(messages):
         text = msg.get_text()
-        clean_text = fa_to_en_number(text).replace(",", "").replace("،", "")
         
-        for line in clean_text.split('\n'):
-            if "18" in line or "۱۸" in line or "عیار" in line or "گرم" in line:
-                numbers = re.findall(r'\d{7,8}', line)
-                if numbers:
-                    price = int(numbers[0])
-                    break
+        # حتماً باید کلمه ۱۸ یا 18 توی پیام باشه
+        if "18" in text or "۱۸" in text:
+            for line in text.split('\n'):
+                # دقیقاً روی خطی قفل میکنه که هم عیار/گرم توش باشه هم عدد ۱۸
+                if ("18" in line or "۱۸" in line) and ("گرم" in line or "عیار" in line):
+                    # تبدیل اعداد فارسی به انگلیسی و حذف کاماها
+                    clean_line = fa_to_en_number(line).replace(",", "").replace("،", "")
+                    # حذف عدد 18 از خط برای اینکه با قیمت اصلی قاطی نشه
+                    clean_line = clean_line.replace("18", "")
+                    
+                    # پیدا کردن عدد قیمت اصلی (بین ۶ تا ۹ رقم)
+                    numbers = re.findall(r'\d{6,9}', clean_line)
+                    if numbers:
+                        price = int(numbers[0])
+                        break
         if price:
             break
 
     if not price:
-        last_message = messages[-1].get_text()
-        clean_text = fa_to_en_number(last_message).replace(",", "").replace("،", "")
-        all_numbers = re.findall(r'\d{7,8}', clean_text)
-        if all_numbers:
-            price = int(all_numbers[0])
-
-    if price:
-        price_text = f"{price:,}"
-    else:
-        print("خطا: قیمت پیدا نشد.")
+        print("خطا: قیمت واقعی طلا در پیام‌ها پیدا نشد.")
         exit()
+        
+    price_text = f"{price:,}"
         
 except Exception as e:
     print("خطا در سیستم:", e)
