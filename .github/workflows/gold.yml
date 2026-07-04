@@ -1,22 +1,20 @@
-name: Gold Price Bot
+name: Daily Summary Bot
 
 on:
   schedule:
-    - cron: '*/15 5-17 * * *'
+    - cron: '30 16 * * *'
   workflow_dispatch:
 
 permissions:
-  contents: write  # 🔑 قفل دسترسی نوشتن و پوش کردن با این خط باز میشه
+  contents: write
 
 jobs:
-  check-price:
+  send-summary:
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout repository code
       uses: actions/checkout@v3
-      with:
-        persist-credentials: true
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -28,19 +26,19 @@ jobs:
         pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Run Price Bot
+    - name: Run Summary Bot
       env:
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         CHAT_ID: ${{ secrets.CHAT_ID }}
         EITAA_TOKEN: ${{ secrets.EITAA_TOKEN }}
         EITAA_CHAT_ID: ${{ secrets.EITAA_CHAT_ID }}
-        MODE: "price"
+        MODE: "summary"
       run: python main.py
 
-    - name: Save Changes to GitHub
+    - name: Reset daily_prices.txt on GitHub
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git add daily_prices.txt last_price.txt || true
-        git commit -m "Save today's prices [skip ci]" || true
+        git add daily_prices.txt
+        git commit -m "Reset daily prices for tomorrow [skip ci]" || true
         git push origin HEAD:${{ github.ref }} || true
