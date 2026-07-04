@@ -9,6 +9,7 @@ BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = os.environ["CHAT_ID"]
 EITAA_TOKEN = os.environ.get("EITAA_TOKEN")
 EITAA_CHAT_ID = os.environ.get("EITAA_CHAT_ID")
+MODE = os.environ.get("MODE", "price")  # میتونه price باشه یا summary
 
 # آیدی کانال تلگرام اتحادیه مشهد
 CHANNEL_USERNAME = "etjmir" 
@@ -34,52 +35,7 @@ def gregorian_to_jalali(gy, gm, gd):
     jd = 1 + (days % 31) if days < 186 else 1 + ((days - 186) % 30)
     return f"{jy}/{jm:02d}/{jd:02d}"
 
-# دریافت قیمت از کانال تلگرام اتحادیه
-try:
-    url = f"https://t.me/s/{CHANNEL_USERNAME}"
-    response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
-    messages = soup.find_all('div', class_='tgme_widget_message_text')
-    if not messages:
-        print("خطا: پیامی پیدا نشد!")
-        exit()
-        
-    price = None
-    
-    # گشتن بین آخرین پیام‌ها برای پیدا کردن نرخ طلای ۱۸ عیار
-    for msg in reversed(messages):
-        text = msg.get_text()
-        
-        # حتماً باید کلمه ۱۸ یا 18 توی پیام باشه
-        if "18" in text or "۱۸" in text:
-            for line in text.split('\n'):
-                # دقیقاً روی خطی قفل میکنه که هم عیار/گرم توش باشه هم عدد ۱۸
-                if ("18" in line or "۱۸" in line) and ("گرم" in line or "عیار" in line):
-                    # تبدیل اعداد فارسی به انگلیسی و حذف کاماها
-                    clean_line = fa_to_en_number(line).replace(",", "").replace("،", "")
-                    # حذف عدد 18 از خط برای اینکه با قیمت اصلی قاطی نشه
-                    clean_line = clean_line.replace("18", "")
-                    
-                    # پیدا کردن عدد قیمت اصلی (بین ۶ تا ۹ رقم)
-                    numbers = re.findall(r'\d{6,9}', clean_line)
-                    if numbers:
-                        price = int(numbers[0])
-                        break
-        if price:
-            break
-
-    if not price:
-        print("خطا: قیمت واقعی طلا در پیام‌ها پیدا نشد.")
-        exit()
-        
-    price_text = f"{price:,}"
-        
-except Exception as e:
-    print("خطا در سیستم:", e)
-    exit()
-
-# محاسبات تاریخ و زمان تهران
+# محاسبه تاریخ و زمان تهران
 tz_iran = datetime.timezone(datetime.timedelta(hours=3, minutes=30))
 now_iran = datetime.datetime.now(tz_iran)
 date_text = gregorian_to_jalali(now_iran.year, now_iran.month, now_iran.day)
@@ -87,35 +43,43 @@ weekdays = ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنج‌ش�
 weekday = weekdays[now_iran.weekday()]
 time_text = now_iran.strftime("%H:%M")
 
-# ذخیره برای آمار روزانه
-try:
-    with open("daily_prices.txt", "a") as f: f.write(f"{price}\n")
-except: pass
-
-# جلوگیری از ارسال پیام تکراری
-try:
-    with open("last_price.txt", "r") as f: last_price = f.read().strip()
-except: last_price = ""
-
-if str(last_price) == str(price):
-    print("قیمت تغییر نکرده؛ خروج از برنامه.")
-    exit()
-
-try:
-    with open("last_price.txt", "w") as f: f.write(str(price))
-except: pass
-
-# ساخت پیام نهایی
-message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
+# 📊 بخش اول: پردازش گزارش روزانه (خلاصه بازار)
+if MODE == "summary":
+    if not os.path.exists("daily_prices.txt"):
+        print("فایل آمار روزانه پیدا نشد.")
+        exit()
+        
+    with open("daily_prices.txt", "r") as f:
+        lines = [int(line.strip()) for line in f.readlines() if line.strip().isdigit()]
+        
+    if not lines:
+        print("آماری برای امروز ثبت نشده است.")
+        exit()
+        
+    open_price = lines[0]
+    close_price = lines[-1]
+    high_price = max(lines)
+    low_price = min(lines)
+    diff = close_price - open_price
+    
+    if diff > 0:
+        diff_sign = "🔺 +"
+    elif diff < 0:
+        diff_sign = "🔻 "
+    else:
+        diff_sign = "🔹 "
+        
+    pct = (diff / open_price) * 100 if open_price else 0
+    
+    summary_message = f"""📊 گزارش و خلاصه بازار امروز
 🗓 {to_persian_number(date_text)} | {weekday}
-🕒 بروزرسانی: {to_persian_number(time_text)}
-💰 هر گرم: {to_persian_number(price_text)} تومان
+━━━━━━━━━━━━━━━
+🔓 نرخ بازگشایی: {to_persian_number(f"{open_price:,}")} تومان
+🔒 نرخ پایانی: {to_persian_number(f"{close_price:,}")} تومان
+🔺 بالاترین نرخ: {to_persian_number(f"{high_price:,}")} تومان
+🔻 پایین‌ترین نرخ: {to_persian_number(f"{low_price:,}")} تومان
+📈 میزان تغییر: {diff_sign}{to_persian_number(f"{abs(diff):,}")} تومان ({to_persian_number(f"{pct:.2f}")}٪)
 ━━━━━━━━━━━━━━━
 طلای ماهان (اسکندری گلد)💎"""
 
-# ارسال به تلگرام و ایتا
-requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data={"chat_id": CHAT_ID, "text": message})
-if EITAA_TOKEN and EITAA_CHAT_ID:
-    requests.post(f"https://eitaayar.ir/api/{EITAA_TOKEN}/sendMessage", data={"chat_id": EITAA_CHAT_ID, "text": message})
-
-print("✅ پیام با موفقیت ارسال شد.")
+    requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data={"chat_
