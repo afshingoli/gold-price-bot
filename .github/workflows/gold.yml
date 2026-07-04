@@ -1,44 +1,29 @@
-name: Daily Summary Bot
-
+name: Gold Price Bot
 on:
   schedule:
-    - cron: '30 16 * * *'
+    - cron: "*/5 * * * *"
   workflow_dispatch:
-
-permissions:
-  contents: write
-
 jobs:
-  send-summary:
+  run:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
     steps:
-    - name: Checkout repository code
-      uses: actions/checkout@v3
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
-
-    - name: Install requirements
-      run: |
-        pip install --upgrade pip
-        pip install -r requirements.txt
-
-    - name: Run Summary Bot
-      env:
-        BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-        CHAT_ID: ${{ secrets.CHAT_ID }}
-        EITAA_TOKEN: ${{ secrets.EITAA_TOKEN }}
-        EITAA_CHAT_ID: ${{ secrets.EITAA_CHAT_ID }}
-        MODE: "summary"
-      run: python main.py
-
-    - name: Reset daily_prices.txt on GitHub
-      run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git add daily_prices.txt
-        git commit -m "Reset daily prices for tomorrow [skip ci]" || true
-        git push origin HEAD:${{ github.ref }} || true
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests beautifulsoup4
+      - run: python main.py
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+          EITAA_TOKEN: ${{ secrets.EITAA_TOKEN }}
+          EITAA_CHAT_ID: ${{ secrets.EITAA_CHAT_ID }}
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Update prices" || echo "Nothing to commit"
+          git push
