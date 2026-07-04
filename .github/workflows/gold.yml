@@ -2,9 +2,11 @@ name: Gold Price Bot
 
 on:
   schedule:
-    # اجرا هر ۱۵ دقیقه از ساعت ۸:۳۰ صبح تا ۸:۳۰ شب به وقت ایران
     - cron: '*/15 5-17 * * *'
-  workflow_dispatch: # دکمه اجرای دستی
+  workflow_dispatch:
+
+permissions:
+  contents: write  # 🔑 قفل دسترسی نوشتن و پوش کردن با این خط باز میشه
 
 jobs:
   check-price:
@@ -13,6 +15,8 @@ jobs:
     steps:
     - name: Checkout repository code
       uses: actions/checkout@v3
+      with:
+        persist-credentials: true
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -33,10 +37,10 @@ jobs:
         MODE: "price"
       run: python main.py
 
-    - name: Save Changes to GitHub (CRITICAL)
+    - name: Save Changes to GitHub
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
         git add daily_prices.txt last_price.txt || true
         git commit -m "Save today's prices [skip ci]" || true
-        git push || true
+        git push origin HEAD:${{ github.ref }} || true
