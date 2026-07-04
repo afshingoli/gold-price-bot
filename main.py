@@ -1,6 +1,8 @@
 import os
 import requests
 import datetime
+import re
+from bs4 import BeautifulSoup
 
 # تنظیم توکن‌ها و آیدی‌ها از سکرت‌های گیت‌هاب
 BOT_TOKEN = os.environ["BOT_TOKEN"]
@@ -10,10 +12,15 @@ CHAT_ID = os.environ["CHAT_ID"]
 EITAA_TOKEN = os.environ.get("EITAA_TOKEN")
 EITAA_CHAT_ID = os.environ.get("EITAA_CHAT_ID")
 
-PRICE_API = "http://et.tala.ir/webservice/haghanigold.com/6397dbw8333f095bb55cd539f865a994"
+# 📢 آیدی کانال تلگرامی که می‌خواهی قیمت را از آن بگیری (بدون @)
+# مثلاً اگر آیدی کانال tg_gold_union است، همان را بنویس
+CHANNEL_USERNAME = "آیدی_کانال_اتحادیه_را_اینجا_بنویس" 
 
 def to_persian_number(text):
     return str(text).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+
+def fa_to_en_number(text):
+    return str(text).translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
 
 # تابع داخلی برای تبدیل تاریخ میلادی به شمسی بدون نیاز به اینترنت
 def gregorian_to_jalali(gy, gm, gd):
@@ -41,133 +48,29 @@ def gregorian_to_jalali(gy, gm, gd):
         jd = 1 + ((days - 186) % 30)
     return f"{jy}/{jm:02d}/{jd:02d}"
 
-# ۱. دریافت قیمت لحظه‌ای از API
+# ۱. دریافت قیمت از آخرین پیام کانال تلگرام (اسکرپ کردن نسخه وب)
 try:
-    data = requests.get(PRICE_API, timeout=10).json()
-    price = data["geram18"]["value"] // 10
-    price_text = f"{price:,}"
-except Exception as e:
-    print("API PRICE ERROR:", e)
-    exit()
-
-# ۲. محاسبه تاریخ و زمان تهران به صورت کاملاً داخلی و ۱۰۰٪ پایدار
-try:
-    # تنظیم اختلاف ساعت رسمی ایران (UTC + 03:30)
-    tz_iran = datetime.timezone(datetime.timedelta(hours=3, minutes=30))
-    now_iran = datetime.datetime.now(tz_iran)
+    url = f"https://t.me/s/{CHANNEL_USERNAME}"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    response = requests.get(url, headers=headers, timeout=15)
+    soup = BeautifulSoup(response.text, 'html.parser')
     
-    # تبدیل به شمسی
-    date_text = gregorian_to_jalali(now_iran.year, now_iran.month, now_iran.day)
+    # پیدا کردن تگ‌های حاوی متن پیام‌ها
+    messages = soup.find_all('div', class_='tgme_widget_message_text')
     
-    # تعیین نام روز هفته
-    weekdays_fa = ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنج‌شنبه", "جمعه", "شنبه", "یکشنبه"]
-    weekday = weekdays_fa[now_iran.weekday()]
-    
-    # استخراج ساعت و دقیقه
-    time_text = now_iran.strftime("%H:%M")
-    hour_now = now_iran.hour
-    minute_now = now_iran.minute
-except Exception as e:
-    print("LOCAL TIME ERROR:", e)
-    exit()
-
-# ۳. ذخیره قیمت لحظه‌ای در آرشیو روزانه
-try:
-    with open("daily_prices.txt", "a") as f:
-        f.write(f"{price}\n")
-except Exception as e:
-    print("Error saving daily price:", e)
-
-# خواندن تاریخ آخرین گزارش ارسال شده
-try:
-    with open("last_summary_date.txt", "r") as f:
-        last_summary = f.read().strip()
-except:
-    last_summary = ""
-
-# 📊 ۴. منطق ارسال گزارش خلاصه وضعیت پایان روز (ساعت ۲۳:۳۰ شب)
-if hour_now == 23 and minute_now >= 30 and last_summary != date_text:
-    try:
-        prices = []
-        try:
-            with open("daily_prices.txt", "r") as f:
-                lines = f.readlines()
-            prices = [int(line.strip()) for line in lines if line.strip().isdigit()]
-        except Exception as e:
-            print("Error reading daily_prices.txt:", e)
+    if not messages:
+        print("خطا: هیچ پیامی در کانال پیدا نشد یا آیدی کانال اشتباه است/خصوصی است.")
+        exit()
         
-        if prices:
-            open_p = prices[0]
-            high_p = max(prices)
-            low_p = min(prices)
-            close_p = prices[-1]
-            
-            summary_message = f"""📊 گزارش خلاصه وضعیت بازار امروز
-🗓 {to_persian_number(date_text)} | {weekday}
-🕒 ساعت انتشار: {to_persian_number(time_text)}
-
-🔹 نرخ شروع بازار: {to_persian_number(f"{open_p:,}")} تومان
-🔺 بالاترین نرخ امروز: {to_persian_number(f"{high_p:,}")} تومان
-🔻 پایین‌ترین نرخ امروز: {to_persian_number(f"{low_p:,}")} تومان
-🏁 نرخ پایانی بازار: {to_persian_number(f"{close_p:,}")} تومان
-
-━━━━━━━━━━━━━━━
-طلای ماهان (اسکندری گلد)💎"""
-            
-            # ارسال گزارش پایانی به تلگرام
-            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data={"chat_id": CHAT_ID, "text": summary_message})
-            
-            # ارسال گزارش پایانی به ایتا
-            if EITAA_TOKEN and EITAA_CHAT_ID:
-                requests.post(f"https://eitaayar.ir/api/{EITAA_TOKEN}/sendMessage", data={"chat_id": EITAA_CHAT_ID, "text": summary_message})
-                
-            print("✅ گزارش خلاصه وضعیت روزانه با موفقیت ارسال شد.")
-            
-            # خالی کردن فایل قیمت‌ها و ثبت تاریخ
-            try:
-                with open("daily_prices.txt", "w") as f:
-                    f.write("")
-                with open("last_summary_date.txt", "w") as f:
-                    f.write(date_text)
-            except Exception as e:
-                print("Error clearing files after summary:", e)
-                
-    except Exception as e:
-        print("Error in generating summary:", e)
-
-# 🛑 ۵. منطق جلوگیری از ارسال قیمت تکراری
-last_price = ""
-try:
-    with open("last_price.txt", "r") as f:
-        last_price = f.read().strip()
-except Exception:
-    last_price = ""
-
-# اگر قیمت تغییر نکرده باشد، اسکریپت خارج می‌شود
-if str(last_price) == str(price):
-    print("قیمت تغییر نکرده است. خروج از برنامه.")
-    exit()
-
-# ذخیره قیمت جدید برای مقایسه بعدی
-try:
-    with open("last_price.txt", "w") as f:
-        f.write(str(price))
-except Exception as e:
-    print("Error saving last price to file:", e)
-
-# 💎 ساختار پیام معمولی لحظه‌ای
-message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
-🗓 {to_persian_number(date_text)} | {weekday}
-🕒 بروزرسانی: {to_persian_number(time_text)}
-💰 هر گرم: {to_persian_number(price_text)} تومان
-━━━━━━━━━━━━━━━
-طلای ماهان (اسکندری گلد)💎"""
-
-# ارسال پیام معمولی به تلگرام
-requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data={"chat_id": CHAT_ID, "text": message})
-
-# ارسال پیام معمولی به ایتا
-if EITAA_TOKEN and EITAA_CHAT_ID:
-    requests.post(f"https://eitaayar.ir/api/{EITAA_TOKEN}/sendMessage", data={"chat_id": EITAA_CHAT_ID, "text": message})
-
-print("✅ پیام نرخ لحظه‌ای ارسال شد.")
+    # گرفتن متن آخرین پیام کانال
+    last_message = messages[-1].get_text()
+    print("متن آخرین پیام دریافت شده:\n", last_message)
+    
+    # تبدیل اعداد فارسی پیام به انگلیسی و حذف کاماها برای استخراج راحت‌تر
+    clean_text = fa_to_en_number(last_message).replace(",", "").replace("،", "")
+    
+    # پیدا کردن اعداد ۷ یا ۸ رقمی (مثلاً عددی بین ۱ تا ۲۰ میلیون برای قیمت طلا)
+    all_numbers = re.findall(r'\d{7,8}', clean_text)
+    
+    if all_numbers:
+        # فرض بر این است که اولین عدد بزرگ پیدا
