@@ -1,13 +1,13 @@
-name: Daily Summary Bot
+name: Gold Price Bot
 
 on:
   schedule:
-    # ساعت ۲۱:۰۰ شب به وقت ایران (۱۷:۳۰ به وقت UTC)
-    - cron: '30 17 * * *'
+    # اجرا هر ۱۵ دقیقه از ساعت ۸:۳۰ صبح تا ۸:۳۰ شب به وقت ایران
+    - cron: '*/15 5-17 * * *'
   workflow_dispatch: # دکمه اجرای دستی
 
 jobs:
-  run-summary:
+  check-price:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,19 +24,19 @@ jobs:
         pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Run Summary Script
+    - name: Run Price Bot
       env:
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         CHAT_ID: ${{ secrets.CHAT_ID }}
         EITAA_TOKEN: ${{ secrets.EITAA_TOKEN }}
         EITAA_CHAT_ID: ${{ secrets.EITAA_CHAT_ID }}
-        MODE: "summary" # به بات میگه الان وقت گزارش روزانه‌ست
+        MODE: "price"
       run: python main.py
 
-    - name: Save changes
+    - name: Save Changes to GitHub (CRITICAL)
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git add daily_prices.txt || true
-        git commit -m "Reset daily prices for tomorrow [skip ci]" || true
+        git add daily_prices.txt last_price.txt || true
+        git commit -m "Save today's prices [skip ci]" || true
         git push || true

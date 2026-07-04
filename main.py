@@ -50,7 +50,8 @@ if MODE == "summary":
         exit()
         
     with open("daily_prices.txt", "r") as f:
-        lines = [int(line.strip()) for line in f.readlines() if line.strip().isdigit()]
+        # فیلتر کردن قیمت‌های واقعی (فقط مبالغ بالای ۲ میلیون تومان پذیرفته می‌شوند)
+        lines = [int(line.strip()) for line in f.readlines() if line.strip().isdigit() and int(line.strip()) > 2000000]
         
     if not lines:
         print("آماری برای امروز ثبت نشده است.")
