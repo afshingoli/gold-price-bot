@@ -1,19 +1,45 @@
 import os
 import requests
+import datetime
 
 # تنظیم توکن‌ها و آیدی‌ها از سکرت‌های گیت‌هاب
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = os.environ["CHAT_ID"]
 
-# متغیرهای ایتا (اگر در گیت‌هاب ست شده باشند خودکار کار می‌کنند)
+# متغیرهای ایتا
 EITAA_TOKEN = os.environ.get("EITAA_TOKEN")
 EITAA_CHAT_ID = os.environ.get("EITAA_CHAT_ID")
 
 PRICE_API = "http://et.tala.ir/webservice/haghanigold.com/6397dbw8333f095bb55cd539f865a994"
-TIME_API = "https://api.keybit.ir/time/"
 
 def to_persian_number(text):
     return str(text).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+
+# تابع داخلی برای تبدیل تاریخ میلادی به شمسی بدون نیاز به اینترنت
+def gregorian_to_jalali(gy, gm, gd):
+    g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 335]
+    if gy > 1600:
+        jy = 979
+        gy -= 1600
+    else:
+        jy = 0
+        gy -= 621
+    gy2 = gy + 1 if gm > 2 else gy
+    days = (365 * gy) + int((gy + 3) / 4) - int((gy + 99) / 100) + int((gy + 399) / 400) - 80 + gd + g_d_m[gm - 1]
+    jy += 33 * int(days / 12053)
+    days %= 12053
+    jy += 4 * int(days / 1461)
+    days %= 1461
+    if days > 365:
+        jy += int((days - 1) / 365)
+        days = (days - 1) % 365
+    if days < 186:
+        jm = 1 + int(days / 31)
+        jd = 1 + (days % 31)
+    else:
+        jm = 7 + int((days - 186) / 30)
+        jd = 1 + ((days - 186) % 30)
+    return f"{jy}/{jm:02d}/{jd:02d}"
 
 # ۱. دریافت قیمت لحظه‌ای از API
 try:
@@ -24,19 +50,28 @@ except Exception as e:
     print("API PRICE ERROR:", e)
     exit()
 
-# ۲. دریافت تاریخ و زمان شمسی دقیق از API زمان
+# ۲. محاسبه تاریخ و زمان تهران به صورت کاملاً داخلی و ۱۰۰٪ پایدار
 try:
-    time_response = requests.get(TIME_API, timeout=10).json()
-    date_text = time_response["date"]["full"]["official"]["iso"]["date"]["persian"]  # مثل: 1402/08/25
-    weekday = time_response["week_day"]["name"]  # مثل: پنجشنبه
-    time_text = time_response["time24"]["full"][:5]  # مثل: 23:30
-    hour_now = int(time_response["time24"]["hour"])  # ساعت فعلی ایران
-    minute_now = int(time_response["time24"]["minute"])  # دقیقه فعلی ایران
+    # تنظیم اختلاف ساعت رسمی ایران (UTC + 03:30)
+    tz_iran = datetime.timezone(datetime.timedelta(hours=3, minutes=30))
+    now_iran = datetime.datetime.now(tz_iran)
+    
+    # تبدیل به شمسی
+    date_text = gregorian_to_jalali(now_iran.year, now_iran.month, now_iran.day)
+    
+    # تعیین نام روز هفته
+    weekdays_fa = ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنج‌شنبه", "جمعه", "شنبه", "یکشنبه"]
+    weekday = weekdays_fa[now_iran.weekday()]
+    
+    # استخراج ساعت و دقیقه
+    time_text = now_iran.strftime("%H:%M")
+    hour_now = now_iran.hour
+    minute_now = now_iran.minute
 except Exception as e:
-    print("API TIME ERROR:", e)
+    print("LOCAL TIME ERROR:", e)
     exit()
 
-# ۳. ذخیره قیمت لحظه‌ای در آرشیو روزانه (برای محاسبه سوابق)
+# ۳. ذخیره قیمت لحظه‌ای در آرشیو روزانه
 try:
     with open("daily_prices.txt", "a") as f:
         f.write(f"{price}\n")
@@ -50,19 +85,22 @@ try:
 except:
     last_summary = ""
 
-# 📊 ۴. منطق ارسال گزارش خلاصه وضعیت پایان روز (راس ساعت ۱۱:۳۰ شب)
+# 📊 ۴. منطق ارسال گزارش خلاصه وضعیت پایان روز (ساعت ۲۳:۳۰ شب)
 if hour_now == 23 and minute_now >= 30 and last_summary != date_text:
     try:
-        with open("daily_prices.txt", "r") as f:
-            lines = f.readlines()
-        
-        prices = [int(line.strip()) for line in lines if line.strip().isdigit()]
+        prices = []
+        try:
+            with open("daily_prices.txt", "r") as f:
+                lines = f.readlines()
+            prices = [int(line.strip()) for line in lines if line.strip().isdigit()]
+        except Exception as e:
+            print("Error reading daily_prices.txt:", e)
         
         if prices:
-            open_p = prices[0]       # نرخ شروع بازار
-            high_p = max(prices)     # بالاترین نرخ روز
-            low_p = min(prices)      # پایین‌ترین نرخ روز
-            close_p = prices[-1]     # نرخ پایانی بازار
+            open_p = prices[0]
+            high_p = max(prices)
+            low_p = min(prices)
+            close_p = prices[-1]
             
             summary_message = f"""📊 گزارش خلاصه وضعیت بازار امروز
 🗓 {to_persian_number(date_text)} | {weekday}
@@ -85,33 +123,39 @@ if hour_now == 23 and minute_now >= 30 and last_summary != date_text:
                 
             print("✅ گزارش خلاصه وضعیت روزانه با موفقیت ارسال شد.")
             
-            # خالی کردن فایل قیمت‌ها برای شروع دیتای فردا
-            with open("daily_prices.txt", "w") as f:
-                f.write("")
-            # ثبت تاریخ امروز برای جلوگیری از ارسال مجدد در همان شب
-            with open("last_summary_date.txt", "w") as f:
-                f.write(date_text)
+            # خالی کردن فایل قیمت‌ها و ثبت تاریخ
+            try:
+                with open("daily_prices.txt", "w") as f:
+                    f.write("")
+                with open("last_summary_date.txt", "w") as f:
+                    f.write(date_text)
+            except Exception as e:
+                print("Error clearing files after summary:", e)
                 
     except Exception as e:
         print("Error in generating summary:", e)
 
-# 🛑 ۵. منطق جلوگیری از ارسال قیمت تکراری (برای پیام‌های معمولی طول روز)
+# 🛑 ۵. منطق جلوگیری از ارسال قیمت تکراری
+last_price = ""
 try:
     with open("last_price.txt", "r") as f:
         last_price = f.read().strip()
-except:
+except Exception:
     last_price = ""
 
-# اگر قیمت تغییر نکرده باشد، اسکریپت پیام معمولی نمی‌فرستد و خارج می‌شود
-if last_price == str(price):
+# اگر قیمت تغییر نکرده باشد، اسکریپت خارج می‌شود
+if str(last_price) == str(price):
     print("قیمت تغییر نکرده است. خروج از برنامه.")
     exit()
 
 # ذخیره قیمت جدید برای مقایسه بعدی
-with open("last_price.txt", "w") as f:
-    f.write(str(price))
+try:
+    with open("last_price.txt", "w") as f:
+        f.write(str(price))
+except Exception as e:
+    print("Error saving last price to file:", e)
 
-# 💎 ساختار پیام معمولی لحظه‌ای (همراه با تاریخ شمسی دقیق)
+# 💎 ساختار پیام معمولی لحظه‌ای
 message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
 🗓 {to_persian_number(date_text)} | {weekday}
 🕒 بروزرسانی: {to_persian_number(time_text)}
