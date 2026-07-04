@@ -63,7 +63,8 @@ try:
                 if int(n) > 2000000:
                     price = int(n)
                     break
-        if price: break
+        if price:
+            break
         
     if not price:
         exit("قیمت معتبری در پیام‌های اخیر یافت نشد.")
@@ -77,7 +78,8 @@ except Exception as e:
 try:
     with open("daily_prices.txt", "a", encoding="utf-8") as f:
         f.write(f"{price}\n")
-except: pass
+except Exception:
+    pass
 
 # ==========================================
 # بخش دوم: گزارش خلاصه وضعیت راس ساعت ۸ شب
@@ -86,7 +88,8 @@ last_summary_date = ""
 try:
     with open("last_summary.txt", "r", encoding="utf-8", errors="ignore") as f:
         last_summary_date = f.read().strip()
-except: pass
+except Exception:
+    pass
 
 if hour_now >= 20 and last_summary_date != date_text:
     try:
@@ -137,7 +140,8 @@ try:
         content = f.read().strip()
         if content.isdigit():
             last_price = content
-    except Exception: pass
+except Exception:
+    pass
 
 if str(price) == str(last_price):
     print("قیمت تغییری نکرده است.")
