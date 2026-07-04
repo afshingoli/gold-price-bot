@@ -27,16 +27,16 @@ except Exception as e:
 # ۲. دریافت تاریخ و زمان شمسی دقیق از API زمان
 try:
     time_response = requests.get(TIME_API, timeout=10).json()
-    date_text = time_response["date"]["full"]["official"]["iso"]["date"]["persian"]  # مثل: 1402/08/25
-    weekday = time_response["week_day"]["name"]  # مثل: پنجشنبه
-    time_text = time_response["time24"]["full"][:5]  # مثل: 23:30
-    hour_now = int(time_response["time24"]["hour"])  # ساعت فعلی ایران
-    minute_now = int(time_response["time24"]["minute"])  # دقیقه فعلی ایران
+    date_text = time_response["date"]["full"]["official"]["iso"]["date"]["persian"]
+    weekday = time_response["week_day"]["name"]
+    time_text = time_response["time24"]["full"][:5]
+    hour_now = int(time_response["time24"]["hour"])
+    minute_now = int(time_response["time24"]["minute"])
 except Exception as e:
     print("API TIME ERROR:", e)
     exit()
 
-# ۳. ذخیره قیمت لحظه‌ای در آرشیو روزانه (برای محاسبه سوابق)
+# ۳. ذخیره قیمت لحظه‌ای در آرشیو روزانه
 try:
     with open("daily_prices.txt", "a") as f:
         f.write(f"{price}\n")
@@ -50,19 +50,22 @@ try:
 except:
     last_summary = ""
 
-# 📊 ۴. منطق ارسال گزارش خلاصه وضعیت پایان روز (راس ساعت ۱۱:۳۰ شب)
+# 📊 ۴. منطق ارسال گزارش خلاصه وضعیت پایان روز (ساعت ۲۳:۳۰ شب)
 if hour_now == 23 and minute_now >= 30 and last_summary != date_text:
     try:
-        with open("daily_prices.txt", "r") as f:
-            lines = f.readlines()
-        
-        prices = [int(line.strip()) for line in lines if line.strip().isdigit()]
+        prices = []
+        try:
+            with open("daily_prices.txt", "r") as f:
+                lines = f.readlines()
+            prices = [int(line.strip()) for line in lines if line.strip().isdigit()]
+        except Exception as e:
+            print("Error reading daily_prices.txt:", e)
         
         if prices:
-            open_p = prices[0]       # نرخ شروع بازار
-            high_p = max(prices)     # بالاترین نرخ روز
-            low_p = min(prices)      # پایین‌ترین نرخ روز
-            close_p = prices[-1]     # نرخ پایانی بازار
+            open_p = prices[0]
+            high_p = max(prices)
+            low_p = min(prices)
+            close_p = prices[-1]
             
             summary_message = f"""📊 گزارش خلاصه وضعیت بازار امروز
 🗓 {to_persian_number(date_text)} | {weekday}
@@ -85,27 +88,50 @@ if hour_now == 23 and minute_now >= 30 and last_summary != date_text:
                 
             print("✅ گزارش خلاصه وضعیت روزانه با موفقیت ارسال شد.")
             
-            # خالی کردن فایل قیمت‌ها برای شروع دیتای فردا
-            with open("daily_prices.txt", "w") as f:
-                f.write("")
-            # ثبت تاریخ امروز برای جلوگیری از ارسال مجدد در همان شب
-            with open("last_summary_date.txt", "w") as f:
-                f.write(date_text)
+            # خالی کردن فایل قیمت‌ها و ثبت تاریخ
+            try:
+                with open("daily_prices.txt", "w") as f:
+                    f.write("")
+                with open("last_summary_date.txt", "w") as f:
+                    f.write(date_text)
+            except Exception as e:
+                print("Error clearing files after summary:", e)
                 
     except Exception as e:
         print("Error in generating summary:", e)
 
-# 🛑 ۵. منطق جلوگیری از ارسال قیمت تکراری (برای پیام‌های معمولی طول روز)
+# 🛑 ۵. منطق جلوگیری از ارسال قیمت تکراری
 try:
     with open("last_price.txt", "r") as f:
         last_price = f.read().strip()
 except:
     last_price = ""
 
-# اگر قیمت تغییر نکرده باشد، اسکریپت پیام معمولی نمی‌فرستد و خارج می‌شود
+# اگر قیمت تغییر نکرده باشد، اسکریپت خارج می‌شود
 if last_price == str(price):
     print("قیمت تغییر نکرده است. خروج از برنامه.")
     exit()
 
-# ذخیره قیمت جدید برای مقایسه بعدی
-with open("last_price.txt", "w
+# ذخیره قیمت جدید برای مقایسه بعدی (این بار کاملاً ایمن و داخل try-except)
+try:
+    with open("last_price.txt", "w") as f:
+        f.write(str(price))
+except Exception as e:
+    print("Error saving last price to file:", e)
+
+# 💎 ساختار پیام معمولی لحظه‌ای
+message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
+🗓 {to_persian_number(date_text)} | {weekday}
+🕒 بروزرسانی: {to_persian_number(time_text)}
+💰 هر گرم: {to_persian_number(price_text)} تومان
+━━━━━━━━━━━━━━━
+طلای ماهان (اسکندری گلد)💎"""
+
+# ارسال پیام معمولی به تلگرام
+requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data={"chat_id": CHAT_ID, "text": message})
+
+# ارسال پیام معمولی به ایتا
+if EITAA_TOKEN and EITAA_CHAT_ID:
+    requests.post(f"https://eitaayar.ir/api/{EITAA_TOKEN}/sendMessage", data={"chat_id": EITAA_CHAT_ID, "text": message})
+
+print("✅ پیام نرخ لحظه‌ای ارسال شد.")
