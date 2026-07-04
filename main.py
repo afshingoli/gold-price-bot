@@ -12,13 +12,30 @@ PRICE_API = "http://et.tala.ir/webservice/haghanigold.com/6397dbw8333f095bb55cd5
 def to_persian_number(text):
     return str(text).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
 
+# فرمول تبدیل تاریخ میلادی به شمسی (بدون نیاز به اینترنت و سایت خارجی)
+def gregorian_to_jalali(gy, gm, gd):
+    g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 335]
+    gy = gy - 1600 if gy > 1600 else gy - 621
+    days = (365 * gy) + int((gy + 3) / 4) - int((gy + 99) / 100) + int((gy + 399) / 400) - 80 + gd + g_d_m[gm - 1]
+    jy = 979 + 33 * int(days / 12053)
+    days %= 12053
+    jy += 4 * int(days / 1461)
+    days %= 1461
+    if days > 365:
+        jy += int((days - 1) / 365)
+        days = (days - 1) % 365
+    jm = 1 + int(days / 31) if days < 186 else 7 + int((days - 186) / 30)
+    jd = 1 + (days % 31) if days < 186 else 1 + ((days - 186) % 30)
+    return f"{jy}/{jm:02d}/{jd:02d}"
+
 # محاسبه تاریخ و ساعت داخلی (ضد تحریم)
 tz_iran = datetime.timezone(datetime.timedelta(hours=3, minutes=30))
 now = datetime.datetime.now(tz_iran)
 weekdays = ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه", "یکشنبه"]
 weekday = weekdays[now.weekday()]
 time_text = now.strftime("%H:%M")
-date_text = now.strftime("%Y/%m/%d")
+# استخراج تاریخ شمسی دقیق
+date_text = gregorian_to_jalali(now.year, now.month, now.day)
 hour_now = now.hour
 
 # ==========================================
