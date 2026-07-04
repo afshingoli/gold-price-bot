@@ -48,7 +48,7 @@ except:
     last_summary = ""
 
 # اگر ساعت از ۲۰ (۸ شب) گذشته بود و امروز هنوز گزارش پایانی نفرستاده بودیم
-if now.hour >= 20 and last_summary != today_str:
+if now.hour >= 0 and last_summary != today_str:
     try:
         with open("daily_prices.txt", "r") as f:
             lines = f.readlines()
