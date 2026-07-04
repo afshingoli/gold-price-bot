@@ -1,55 +1,46 @@
 import os
 import requests
+import datetime
 
-# دریافت توکن‌ها از محیط گیت‌هاب
+# تنظیمات اصلی
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
-
-# آدرس API قیمت
 PRICE_API = "http://et.tala.ir/webservice/haghanigold.com/6397dbw8333f095bb55cd539f865a994"
-# آدرس API زمان
-TIME_API = "https://api.keybit.ir/time/"
 
 def to_persian_number(text):
-    return str(text).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶ exorbitant۹"))
+    # این تابع کاملاً اصلاح شد و دیگه ارور نمیده
+    return str(text).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
 
 # ۱. دریافت قیمت جدید
 try:
-    data = requests.get(PRICE_API).json()
+    data = requests.get(PRICE_API, timeout=10).json()
     price = data["geram18"]["value"] // 10
     price_text = f"{price:,}"
 except Exception as e:
     print(f"خطا در دریافت قیمت: {e}")
     exit()
 
-# ۲. دریافت زمان دقیق
-try:
-    tdata = requests.get(TIME_API).json()["date"]
-    date_text = tdata["full"]["official"]["iso"]["date"]["persian"]
-    weekday = tdata["week_day"]["name"]
-    time_text = tdata["time24"]["full"][:5]
-except Exception as e:
-    print(f"خطا در دریافت زمان: {e}")
-    date_text = "نامشخص"
-    weekday = ""
-    time_text = ""
+# ۲. دریافت ساعت و تاریخ دقیق ایران (بدون نیاز به هیچ API خارجی)
+now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3, minutes=30)))
+weekdays = ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه", "یکشنبه"]
+weekday = weekdays[now.weekday()]
+time_text = now.strftime("%H:%M")
+# تاریخ رو به صورت ساده میذاریم چون API زمان قطع بود
+date_text = now.strftime("%Y/%m/%d") 
 
-# ۳. خواندن ایمن قیمت قبلی (نسخه ضد-خطا)
+# ۳. خواندن ایمن قیمت قبلی (ضد ارور Unicode)
 last_price = "0"
 try:
-    # پارامتر errors='ignore' جلوی ارور UnicodeDecodeError را می‌گیرد
     with open("last_price.txt", "r", encoding="utf-8", errors="ignore") as f:
         content = f.read().strip()
         if content.isdigit():
             last_price = content
-except FileNotFoundError:
-    last_price = "0"
 except Exception:
     last_price = "0"
 
 # ۴. چک کردن تغییر قیمت
 if str(price) == str(last_price):
-    print("قیمت تغییر نکرده است.")
+    print("قیمت تغییری نکرده است.")
     exit()
 
 # ۵. ارسال به تلگرام
@@ -64,7 +55,6 @@ try:
     tg_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     response = requests.post(tg_url, data={"chat_id": CHAT_ID, "text": message})
     if response.status_code == 200:
-        # ۶. ذخیره قیمت جدید فقط در صورت موفقیت
         with open("last_price.txt", "w", encoding="utf-8") as f:
             f.write(str(price))
         print("قیمت با موفقیت ارسال و ذخیره شد.")
