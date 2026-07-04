@@ -4,14 +4,12 @@ import datetime
 import requests
 from bs4 import BeautifulSoup
 
-# تنظیمات توکن‌ها و آیدی‌ها از سکرت‌های گیت‌هاب
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = os.environ["CHAT_ID"]
 EITAA_TOKEN = os.environ.get("EITAA_TOKEN")
 EITAA_CHAT_ID = os.environ.get("EITAA_CHAT_ID")
-MODE = os.environ.get("MODE", "price")  # میتونه price باشه یا summary
+MODE = os.environ.get("MODE", "price")
 
-# آیدی کانال تلگرام اتحادیه مشهد
 CHANNEL_USERNAME = "etjmir" 
 
 def to_persian_number(text):
@@ -35,7 +33,7 @@ def gregorian_to_jalali(gy, gm, gd):
     jd = 1 + (days % 31) if days < 186 else 1 + ((days - 186) % 30)
     return f"{jy}/{jm:02d}/{jd:02d}"
 
-# محاسبه تاریخ و زمان تهران
+# تنظیم دقیق ساعت بر اساس زمان رسمی ایران
 tz_iran = datetime.timezone(datetime.timedelta(hours=3, minutes=30))
 now_iran = datetime.datetime.now(tz_iran)
 date_text = gregorian_to_jalali(now_iran.year, now_iran.month, now_iran.day)
@@ -43,14 +41,12 @@ weekdays = ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنج‌ش�
 weekday = weekdays[now_iran.weekday()]
 time_text = now_iran.strftime("%H:%M")
 
-# 📊 بخش اول: پردازش گزارش روزانه (خلاصه بازار)
 if MODE == "summary":
     if not os.path.exists("daily_prices.txt"):
         print("فایل آمار روزانه پیدا نشد.")
         exit()
         
     with open("daily_prices.txt", "r") as f:
-        # فیلتر کردن قیمت‌های واقعی بالای ۲ میلیون تومان
         lines = [int(line.strip()) for line in f.readlines() if line.strip().isdigit() and int(line.strip()) > 2000000]
         
     if not lines:
@@ -72,7 +68,6 @@ if MODE == "summary":
         
     pct = (diff / open_price) * 100 if open_price else 0
     
-    # 📝 پیام جدید خلاصه همراه با تاریخ روز و ساعت گزارش
     summary_message = f"""📊 گزارش و خلاصه بازار امروز
 🗓 تاریخ روز: {to_persian_number(date_text)} | {weekday}
 🕒 ساعت گزارش: {to_persian_number(time_text)}
@@ -85,9 +80,86 @@ if MODE == "summary":
 ━━━━━━━━━━━━━━━
 طلای ماهان (اسکندری گلد)💎"""
 
-    # ارسال خلاصه به تلگرام
     tg_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     requests.post(tg_url, data={"chat_id": CHAT_ID, "text": summary_message})
     
-    # ارسال خلاصه به ایتا
-    if EITAA_TOKEN and EITAA_
+    if EITAA_TOKEN and EITAA_CHAT_ID:
+        eitaa_url = f"https://eitaayar.ir/api/{EITAA_TOKEN}/sendMessage"
+        requests.post(eitaa_url, data={"chat_id": EITAA_CHAT_ID, "text": summary_message})
+        
+    with open("daily_prices.txt", "w") as f:
+        f.write("")
+        
+    print("✅ گزارش روزانه ارسال شد.")
+    exit()
+
+try:
+    url = f"https://t.me/s/{CHANNEL_USERNAME}"
+    response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    messages = soup.find_all('div', class_='tgme_widget_message_text')
+    if not messages:
+        print("خطا: پیامی پیدا نشد!")
+        exit()
+        
+    price = None
+    for msg in reversed(messages):
+        text = msg.get_text()
+        if "18" in text or "۱۸" in text:
+            for line in text.split('\n'):
+                if ("18" in line or "۱۸" in line) and ("گرم" in line or "عیار" in line):
+                    clean_line = fa_to_en_number(line).replace(",", "").replace("،", "")
+                    clean_line = clean_line.replace("18", "")
+                    numbers = re.findall(r'\d{6,9}', clean_line)
+                    if numbers:
+                        price = int(numbers[0])
+                        break
+        if price:
+            break
+
+    if not price:
+        print("خطا: قیمت پیدا نشد.")
+        exit()
+        
+    price_text = f"{price:,}"
+        
+except Exception as e:
+    print("خطا در سیستم:", e)
+    exit()
+
+try:
+    with open("daily_prices.txt", "a") as f: 
+        f.write(f"{price}\n")
+except: pass
+
+try:
+    with open("last_price.txt", "r") as f: 
+        last_price = f.read().strip()
+except: 
+    last_price = ""
+
+if str(last_price) == str(price):
+    print("قیمت تغییر نکرده.")
+    exit()
+
+try:
+    with open("last_price.txt", "w") as f: 
+        f.write(str(price))
+except: pass
+
+message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
+🗓 {to_persian_number(date_text)} | {weekday}
+🕒 بروزرسانی: {to_persian_number(time_text)}
+💰 هر گرم: {to_persian_number(price_text)} تومان
+━━━━━━━━━━━━━━━
+طلای ماهان (اسکندری گلد)💎"""
+
+tg_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+requests.post(tg_url, data={"chat_id": CHAT_ID, "text": message})
+
+if EITAA_TOKEN and EITAA_CHAT_ID:
+    eitaa_url = f"https://eitaayar.ir/api/{EITAA_TOKEN}/sendMessage"
+    requests.post(eitaa_url, data={"chat_id": EITAA_CHAT_ID, "text": message})
+
+print("✅ پیام لحظه‌ای ارسال شد.")
