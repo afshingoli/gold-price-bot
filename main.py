@@ -46,11 +46,22 @@ if MODE == "summary":
         print("فایل آمار روزانه پیدا نشد.")
         exit()
         
-    with open("daily_prices.txt", "r") as f:
-        lines = [int(line.strip()) for line in f.readlines() if line.strip().isdigit() and int(line.strip()) > 2000000]
+    # 🔑 حل مشکل انکودینگ با استفاده از errors='ignore' یا utf-16 در صورت نیاز
+    lines = []
+    try:
+        with open("daily_prices.txt", "r", encoding="utf-8", errors="ignore") as f:
+            raw_lines = f.readlines()
+    except Exception as e:
+        print("خطا در خواندن فایل با utf-8، تلاش مجدد...", e)
+        raw_lines = []
+
+    for line in raw_lines:
+        clean = line.strip().replace('\x00', '') # حذف کاراکترهای پوچ احتمالی
+        if clean.isdigit() and int(clean) > 2000000:
+            lines.append(int(clean))
         
     if not lines:
-        print("آماری برای امروز ثبت نشده است.")
+        print("آماری برای امروز ثبت نشده یا فایل خراب بوده است.")
         exit()
         
     open_price = lines[0]
@@ -65,101 +76,3 @@ if MODE == "summary":
         diff_sign = "🔻 "
     else:
         diff_sign = "🔹 "
-        
-    pct = (diff / open_price) * 100 if open_price else 0
-    
-    summary_message = f"""📊 گزارش و خلاصه بازار امروز
-🗓 تاریخ روز: {to_persian_number(date_text)} | {weekday}
-🕒 ساعت گزارش: {to_persian_number(time_text)}
-━━━━━━━━━━━━━━━
-🔓 نرخ بازگشایی: {to_persian_number(f"{open_price:,}")} تومان
-🔒 نرخ پایانی: {to_persian_number(f"{close_price:,}")} تومان
-🔺 بالاترین نرخ: {to_persian_number(f"{high_price:,}")} تومان
-🔻 پایین‌ترین نرخ: {to_persian_number(f"{low_price:,}")} تومان
-📈 میزان تغییر: {diff_sign}{to_persian_number(f"{abs(diff):,}")} تومان ({to_persian_number(f"{pct:.2f}")}٪)
-━━━━━━━━━━━━━━━
-طلای ماهان (اسکندری گلد)💎"""
-
-    tg_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    requests.post(tg_url, data={"chat_id": CHAT_ID, "text": summary_message})
-    
-    if EITAA_TOKEN and EITAA_CHAT_ID:
-        eitaa_url = f"https://eitaayar.ir/api/{EITAA_TOKEN}/sendMessage"
-        requests.post(eitaa_url, data={"chat_id": EITAA_CHAT_ID, "text": summary_message})
-        
-    with open("daily_prices.txt", "w") as f:
-        f.write("")
-        
-    print("✅ گزارش روزانه ارسال شد.")
-    exit()
-
-try:
-    url = f"https://t.me/s/{CHANNEL_USERNAME}"
-    response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
-    messages = soup.find_all('div', class_='tgme_widget_message_text')
-    if not messages:
-        print("خطا: پیامی پیدا نشد!")
-        exit()
-        
-    price = None
-    for msg in reversed(messages):
-        text = msg.get_text()
-        if "18" in text or "۱۸" in text:
-            for line in text.split('\n'):
-                if ("18" in line or "۱۸" in line) and ("گرم" in line or "عیار" in line):
-                    clean_line = fa_to_en_number(line).replace(",", "").replace("،", "")
-                    clean_line = clean_line.replace("18", "")
-                    numbers = re.findall(r'\d{6,9}', clean_line)
-                    if numbers:
-                        price = int(numbers[0])
-                        break
-        if price:
-            break
-
-    if not price:
-        print("خطا: قیمت پیدا نشد.")
-        exit()
-        
-    price_text = f"{price:,}"
-        
-except Exception as e:
-    print("خطا در سیستم:", e)
-    exit()
-
-try:
-    with open("daily_prices.txt", "a") as f: 
-        f.write(f"{price}\n")
-except: pass
-
-try:
-    with open("last_price.txt", "r") as f: 
-        last_price = f.read().strip()
-except: 
-    last_price = ""
-
-if str(last_price) == str(price):
-    print("قیمت تغییر نکرده.")
-    exit()
-
-try:
-    with open("last_price.txt", "w") as f: 
-        f.write(str(price))
-except: pass
-
-message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
-🗓 {to_persian_number(date_text)} | {weekday}
-🕒 بروزرسانی: {to_persian_number(time_text)}
-💰 هر گرم: {to_persian_number(price_text)} تومان
-━━━━━━━━━━━━━━━
-طلای ماهان (اسکندری گلد)💎"""
-
-tg_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-requests.post(tg_url, data={"chat_id": CHAT_ID, "text": message})
-
-if EITAA_TOKEN and EITAA_CHAT_ID:
-    eitaa_url = f"https://eitaayar.ir/api/{EITAA_TOKEN}/sendMessage"
-    requests.post(eitaa_url, data={"chat_id": EITAA_CHAT_ID, "text": message})
-
-print("✅ پیام لحظه‌ای ارسال شد.")
