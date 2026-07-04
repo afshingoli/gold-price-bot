@@ -8,6 +8,7 @@ on:
   schedule:
     # این یعنی ربات هر ۱۵ دقیقه یک‌بار اتوماتیک اجرا میشه
     - cron: '*/15 * * * *'
+  workflow_dispatch: # 👈 اضافه شدن این خط، دکمه Run workflow رو توی گیت‌هاب ظاهر می‌کنه
 
 jobs:
   run-bot:
