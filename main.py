@@ -1,73 +1,74 @@
 import os
-import re
-import datetime
 import requests
-from bs4 import BeautifulSoup
 
-# دریافت تنظیمات از گیت‌هاب
+# دریافت توکن‌ها از محیط گیت‌هاب
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
-CHANNEL_USERNAME = "etjmir" 
+
+# آدرس API قیمت
+PRICE_API = "http://et.tala.ir/webservice/haghanigold.com/6397dbw8333f095bb55cd539f865a994"
+# آدرس API زمان
+TIME_API = "https://api.keybit.ir/time/"
 
 def to_persian_number(text):
-    return str(text).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+    return str(text).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶ exorbitant۹"))
 
-def fa_to_en_number(text):
-    return str(text).translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
-
-# تنظیم زمان ایران
-tz_iran = datetime.timezone(datetime.timedelta(hours=3, minutes=30))
-now_iran = datetime.datetime.now(tz_iran)
-time_text = now_iran.strftime("%H:%M")
-
-# تابع ایمن برای خواندن فایل (بدون ایجاد ارور Unicode)
-def get_safe_data(filename):
-    if not os.path.exists(filename): return None
-    try:
-        with open(filename, "r", encoding="utf-8", errors="ignore") as f:
-            return f.read().strip()
-    except: return None
-
-# ۱. دریافت نرخ از کانال اتحادیه
+# ۱. دریافت قیمت جدید
 try:
-    url = f"https://t.me/s/{CHANNEL_USERNAME}"
-    response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    messages = soup.find_all('div', class_='tgme_widget_message_text')
-    
-    price = None
-    for msg in reversed(messages):
-        text = fa_to_en_number(msg.get_text())
-        if any(x in text for x in ["18", "گرم", "عیار"]):
-            numbers = re.findall(r'\d{6,9}', text.replace(",", ""))
-            for n in numbers:
-                if int(n) > 2000000:
-                    price = int(n)
-                    break
-        if price: break
-    
-    if not price: exit("قیمت پیدا نشد")
+    data = requests.get(PRICE_API).json()
+    price = data["geram18"]["value"] // 10
+    price_text = f"{price:,}"
 except Exception as e:
-    exit(f"خطای شبکه: {e}")
-
-# ۲. جلوگیری از ارسال پیام تکراری
-last_price = get_safe_data("last_price.txt")
-if str(price) == str(last_price):
-    print("قیمت تغییری نکرده است.")
+    print(f"خطا در دریافت قیمت: {e}")
     exit()
 
-# ۳. ارسال به تلگرام
+# ۲. دریافت زمان دقیق
+try:
+    tdata = requests.get(TIME_API).json()["date"]
+    date_text = tdata["full"]["official"]["iso"]["date"]["persian"]
+    weekday = tdata["week_day"]["name"]
+    time_text = tdata["time24"]["full"][:5]
+except Exception as e:
+    print(f"خطا در دریافت زمان: {e}")
+    date_text = "نامشخص"
+    weekday = ""
+    time_text = ""
+
+# ۳. خواندن ایمن قیمت قبلی (نسخه ضد-خطا)
+last_price = "0"
+try:
+    # پارامتر errors='ignore' جلوی ارور UnicodeDecodeError را می‌گیرد
+    with open("last_price.txt", "r", encoding="utf-8", errors="ignore") as f:
+        content = f.read().strip()
+        if content.isdigit():
+            last_price = content
+except FileNotFoundError:
+    last_price = "0"
+except Exception:
+    last_price = "0"
+
+# ۴. چک کردن تغییر قیمت
+if str(price) == str(last_price):
+    print("قیمت تغییر نکرده است.")
+    exit()
+
+# ۵. ارسال به تلگرام
 message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
+🗓 {to_persian_number(date_text)} | {weekday}
 🕒 بروزرسانی: {to_persian_number(time_text)}
-💰 هر گرم: {to_persian_number(f"{price:,}")} تومان
-━━━━━━━━━━━━━━━
-طلای ماهان"""
 
-requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", 
-              data={"chat_id": CHAT_ID, "text": message})
+💰 هر گرم: {to_persian_number(price_text)} تومان
+"""
 
-# ۴. ذخیره قیمت جدید با انکودینگ ایمن
-with open("last_price.txt", "w", encoding="utf-8") as f:
-    f.write(str(price))
-
-print(f"✅ نرخ {price} با موفقیت ارسال شد.")
+try:
+    tg_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    response = requests.post(tg_url, data={"chat_id": CHAT_ID, "text": message})
+    if response.status_code == 200:
+        # ۶. ذخیره قیمت جدید فقط در صورت موفقیت
+        with open("last_price.txt", "w", encoding="utf-8") as f:
+            f.write(str(price))
+        print("قیمت با موفقیت ارسال و ذخیره شد.")
+    else:
+        print(f"خطای تلگرام: {response.text}")
+except Exception as e:
+    print(f"خطا در ارسال پیام: {e}")
