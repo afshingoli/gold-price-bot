@@ -31,7 +31,7 @@ def send_message(text):
             pass
 
 def clean_text_for_check(text):
-    # حذف فاصله‌ها، نیم‌فاصله‌ها و کشیدگی حروف (ـ) برای مقایسه دقیق و بدون خطا
+    # پاکسازیِ شدیدتر برای جلوگیری از خطای نگارشی ادمین کانال
     return text.replace(" ", "").replace("‌", "").replace("ـ", "").replace("\u200c", "")
 
 try:
@@ -55,16 +55,15 @@ try:
             if text_div:
                 text = text_div.get_text()
                 
-                # بررسی وجود هشتگ در متن (با حذف خطاهای نگارشی احتمالی تلگرام)
+                # بررسی وجود هشتگ
                 if cleaned_target in clean_text_for_check(text):
-                    # شکارچی قیمت: فقط اعدادی که کاما دارن
+                    # شکارچی قیمت (فقط اعدادی که کاما دارن)
                     pattern = r'\d{1,3}[,٫]\d{3}[,٫]\d{3}'
                     matches = re.findall(pattern, text)
                     
                     prices = []
                     for m in matches:
                         clean_num = int(m.replace(",", "").replace("٫", ""))
-                        # فیلتر قیمت: فقط بین ۵ تا ۵۰ میلیون تومان
                         if 5000000 < clean_num < 50000000:
                             prices.append(clean_num)
                     
@@ -73,16 +72,22 @@ try:
                         msg_id = container.get('data-post', 'unknown')
                         break # پیدا شد! توقف جستجو
         
-        # اگر قیمت و آیدی پیام پیدا شد
         if current_price and msg_id:
-            last_id_file = "last_msg_id.txt"
+            state_file = "bot_state.txt"
             last_id = ""
-            if os.path.exists(last_id_file):
-                with open(last_id_file, "r", encoding="utf-8") as f:
-                    last_id = f.read().strip()
+            last_price = ""
             
-            # ارسال پیام فقط در صورتی که این آیدی جدید باشه
-            if msg_id != last_id:
+            # خواندن وضعیت قبلی (آیدی پیام + قیمت قبلی)
+            if os.path.exists(state_file):
+                with open(state_file, "r", encoding="utf-8") as f:
+                    parts = f.read().strip().split(",")
+                    if len(parts) == 2:
+                        last_id, last_price = parts
+            
+            # 🛑 منطق جدید و هوشمند: 
+            # اگر پیام کاملاً جدید بود (آیدی تغییر کرده) 
+            # یا اگر پیام همون بود ولی قیمت رو ادمین ویرایش کرده بود -> بفرست!
+            if msg_id != last_id or str(current_price) != last_price:
                 now = datetime.now(ZoneInfo("Asia/Tehran"))
                 j_date = jdatetime.date.fromgregorian(date=now.date())
                 weekdays = ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه", "یکشنبه"]
@@ -98,7 +103,11 @@ try:
                 
                 send_message(msg)
                 
-                with open(last_id_file, "w", encoding="utf-8") as f:
-                    f.write(msg_id)
+                # ذخیره وضعیت جدید (آیدی جدید و قیمت جدید)
+                with open(state_file, "w", encoding="utf-8") as f:
+                    f.write(f"{msg_id},{current_price}")
+                print(f"✅ Updated! Sent ID: {msg_id}, Price: {current_price}")
+            else:
+                print("💤 No new post and no price changes.")
 except Exception as e:
     print(f"Error: {e}")
