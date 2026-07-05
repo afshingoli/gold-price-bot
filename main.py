@@ -1,149 +1,267 @@
 import os
-import re
 import json
-import logging
-from bs4 import BeautifulSoup
+import re
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-import jdatetime
+from bs4 import BeautifulSoup
 from datetime import datetime
 from zoneinfo import ZoneInfo
+import jdatetime
 
-# تنظیمات لاگر برای عیب‌یابی دقیق‌تر
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# =========================
+# CONFIG & SETUP
+# =========================
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
+EITAA_TOKEN = os.getenv("EITAA_TOKEN")
+EITAA_CHAT_ID = os.getenv("EITAA_CHAT_ID")
 
-# تنظیمات اصلی
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-CHAT_ID = os.environ.get("CHAT_ID")
-EITAA_TOKEN = os.environ.get("EITAA_TOKEN")
-EITAA_CHAT_ID = os.environ.get("EITAA_CHAT_ID")
-CHANNEL_USERNAME = "etjmir"
+CHANNEL_URL = "https://t.me/s/etjmir"
 STATE_FILE = "bot_state.json"
 
-# تنظیم سشن (Session) با قابلیت تلاش مجدد (Retry) در صورت قطعی شبکه
 session = requests.Session()
-retry = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
-adapter = HTTPAdapter(max_retries=retry)
-session.mount('http://', adapter)
-session.mount('https://', adapter)
-session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"})
+session.headers.update({
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+})
 
+# =========================
+# HELPERS (FORMATTING & MATH)
+# =========================
 def to_persian_number(text):
-    return str(text).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+    return str(text).translate(str.maketrans("0123456789.", "۰۱۲۳۴۵۶۷۸۹٫"))
 
-def clean_text_for_check(text):
-    return text.replace(" ", "").replace("‌", "").replace("ـ", "").replace("\u200c", "")
+def format_price(price):
+    return to_persian_number(f"{price:,}")
+
+def normalize_number(text):
+    return text.replace(",", "").replace("٫", "").replace(".", "").replace(" ", "")
+
+def extract_price(text):
+    patterns = [
+        r"\d{1,3}(?:[,٫]\d{3}){1,3}",
+        r"\d{7,9}"
+    ]
+    for p in patterns:
+        m = re.search(p, text)
+        if m:
+            return int(normalize_number(m.group()))
+    return None
+
+def calculate_percent_change(old, new):
+    if old == 0:
+        return 0
+    change = ((new - old) / old) * 100
+    return round(change, 2)
+
+# =========================
+# NETWORK & MESSAGING
+# =========================
+def send_to_api(url, data, name):
+    try:
+        res = session.post(url, data=data, timeout=15)
+        res.raise_for_status()
+        print(f"✅ Sent successfully to {name}")
+    except Exception as e:
+        print(f"❌ Error sending to {name}: {e}")
 
 def send_message(text):
     if BOT_TOKEN and CHAT_ID:
-        try:
-            session.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data={"chat_id": CHAT_ID, "text": text}, timeout=10)
-        except Exception as e:
-            logger.error(f"Telegram Send Error: {e}")
+        tg_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        send_to_api(tg_url, {"chat_id": CHAT_ID, "text": text}, "Telegram")
+        
     if EITAA_TOKEN and EITAA_CHAT_ID:
-        try:
-            session.post(f"https://eitaayar.ir/api/{EITAA_TOKEN}/sendMessage", data={"chat_id": EITAA_CHAT_ID, "text": text}, timeout=10)
-        except Exception as e:
-            logger.error(f"Eitaa Send Error: {e}")
+        eitaa_url = f"https://eitaayar.ir/api/{EITAA_TOKEN}/sendMessage"
+        send_to_api(eitaa_url, {"chat_id": EITAA_CHAT_ID, "text": text}, "Eitaa")
 
+# =========================
+# SCRAPER (ROBUST)
+# =========================
+def get_price():
+    try:
+        r = session.get(CHANNEL_URL, timeout=15)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+        
+        # بررسی ۵ پیام آخر کانال برای جلوگیری از گم شدن قیمت بین پیام‌های متفرقه
+        posts = soup.find_all("div", class_="tgme_widget_message_text")
+        for post in reversed(posts[-5:]):
+            text = post.get_text("\n")
+            if "۱۸" in text or "18" in text or "عیار" in text:
+                price = extract_price(text)
+                # فیلتر منطقی قیمت (بین ۵ تا ۱۰۰ میلیون تومان)
+                if price and 5_000_000 < price < 100_000_000:
+                    return price
+        return None
+    except Exception as e:
+        print(f"❌ Scraper Error: {e}")
+        return None
+
+# =========================
+# STATE MANAGEMENT
+# =========================
 def load_state():
+    default_state = {
+        "date": "",
+        "day_start_price": 0,
+        "last_price": 0,
+        "high": 0,
+        "low": float('inf'),
+        "summary_sent": False,
+        "week_start_price": 0,
+        "weekly_summary_sent": False
+    }
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"Error reading state file: {e}")
-    return {"id": "", "price": 0, "time": ""}
+                data = json.load(f)
+                for key in default_state:
+                    if key not in data:
+                        data[key] = default_state[key]
+                return data
+        except:
+            pass
+    return default_state
 
-def save_state(msg_id, price):
-    state_data = {
-        "id": msg_id,
-        "price": price,
-        "time": datetime.now(ZoneInfo("Asia/Tehran")).isoformat()
-    }
-    tmp_file = STATE_FILE + ".tmp"
+def save_state(state):
+    tmp = STATE_FILE + ".tmp"
     try:
-        # Atomic write: اول در یک فایل موقت می‌نویسیم، بعد جایگزین می‌کنیم تا فایل خراب نشود
-        with open(tmp_file, "w", encoding="utf-8") as f:
-            json.dump(state_data, f, indent=4)
-        os.replace(tmp_file, STATE_FILE)
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=4)
+        os.replace(tmp, STATE_FILE)
     except Exception as e:
-        logger.error(f"Error saving state: {e}")
+        print(f"❌ State Save Error: {e}")
 
-def extract_price_from_text(full_text):
-    # فقط خطی که کلمه "عیار" دارد را جدا می‌کنیم تا با قیمت سکه قاطی نشود
-    lines = full_text.split('\n')
-    for line in lines:
-        if "عیار" in line:
-            # رگکس پیشرفته برای گرفتن اعداد فارسی و انگلیسی با کاما یا نقطه
-            pattern = r'[\d۰-۹]{1,3}[,٫.][\d۰-۹]{3}[,٫.][\d۰-۹]{3}'
-            matches = re.findall(pattern, line)
-            for m in matches:
-                # تبدیل اعداد فارسی به انگلیسی و حذف جداکننده‌ها
-                m_eng = m.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
-                clean_num = int(m_eng.replace(",", "").replace("٫", "").replace(".", ""))
-                # محکم‌کاریِ نهایی: قیمت طلای 18 عیار در این محدوده است
-                if 5000000 < clean_num < 50000000:
-                    return clean_num
-    return None
+# =========================
+# MAIN LOGIC
+# =========================
+def main():
+    current_price = get_price()
+    if not current_price:
+        print("⚠️ No valid price found.")
+        return
 
-try:
-    url = f"https://t.me/s/{CHANNEL_USERNAME}"
-    response = session.get(url, timeout=15)
-    response.raise_for_status() # توقف برنامه در صورت ارور گرفتن از تلگرام
-    soup = BeautifulSoup(response.text, 'html.parser')
+    now = datetime.now(ZoneInfo("Asia/Tehran"))
+    current_date_str = now.strftime("%Y-%m-%d")
+    state = load_state()
+
+    jdate = jdatetime.date.fromgregorian(date=now.date())
+    date_text = jdate.strftime("%Y/%m/%d")
+    time_text = now.strftime("%H:%M")
     
-    message_containers = soup.find_all('div', class_='tgme_widget_message')
-    
-    current_price = None
-    msg_id = None
-    
-    target_hashtag = "#نرخ‌روزطــلانقــره‌وسکــه‌مشـهدمقــدس"
-    cleaned_target = clean_text_for_check(target_hashtag)
-    
-    if message_containers:
-        for container in reversed(message_containers):
-            text_div = container.find('div', class_='tgme_widget_message_text')
-            if text_div:
-                # جایگزین کردن تگ‌های br با \n برای جدا کردن دقیق خطوط
-                for br in text_div.find_all("br"):
-                    br.replace_with("\n")
-                
-                text = text_div.get_text()
-                
-                if cleaned_target in clean_text_for_check(text):
-                    extracted_price = extract_price_from_text(text)
-                    if extracted_price:
-                        current_price = extracted_price
-                        msg_id = container.get('data-post', 'unknown')
-                        break
+    weekdays = ["دوشنبه","سه‌شنبه","چهارشنبه","پنجشنبه","جمعه","شنبه","یکشنبه"]
+    weekday = weekdays[now.weekday()]
+
+    # ۱. مدیریت تغییر روز و هفته
+    if state["date"] != current_date_str:
+        state["date"] = current_date_str
+        state["day_start_price"] = current_price
+        state["high"] = current_price
+        state["low"] = current_price
+        state["summary_sent"] = False
         
-        if current_price and msg_id:
-            last_state = load_state()
-            
-            # اگر آیدی پست عوض شده بود، یا قیمت تغییر کرده بود
-            if str(msg_id) != str(last_state.get("id")) or current_price != last_state.get("price"):
-                now = datetime.now(ZoneInfo("Asia/Tehran"))
-                j_date = jdatetime.date.fromgregorian(date=now.date())
-                weekdays = ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه", "یکشنبه"]
-                weekday = weekdays[now.weekday()]
-                
-                msg = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
-🗓 {to_persian_number(j_date.strftime('%Y/%m/%d'))} | {weekday}
-🕒 بروزرسانی: {to_persian_number(now.strftime('%H:%M'))}
+        # اگر شنبه است، هفته جدید رو استارت بزن
+        if now.weekday() == 5: 
+            state["week_start_price"] = current_price
+            state["weekly_summary_sent"] = False
 
-💰 هر گرم: {to_persian_number(f'{current_price:,}')} تومان
-━━━━━━━━━━━━━━━
-طلای ماهان (اسکندری گلد)💎"""
-                
-                send_message(msg)
-                save_state(msg_id, current_price)
-                logger.info(f"✅ Updated! Sent ID: {msg_id}, Price: {current_price}")
-            else:
-                logger.info("💤 No new post and no price changes.")
+    # مقداردهی اولیه هفته (برای اولین اجرای ربات)
+    if state["week_start_price"] == 0:
+        state["week_start_price"] = current_price
+
+    # آپدیت بالاترین و پایین‌ترین نرخ امروز
+    if current_price > state["high"]: state["high"] = current_price
+    if current_price < state["low"]: state["low"] = current_price
+
+    # ۲. ارسال پیام لحظه‌ای (در صورت تغییر قیمت)
+    if current_price != state["last_price"] and state["last_price"] != 0:
+        diff = current_price - state["last_price"]
+        
+        # فلش‌ها و هشتگ‌های هوشمند
+        if diff > 0:
+            trend = f"🔺 افزایش نسبت به قبل: {format_price(diff)} تومان"
+            hashtag = "#صعودی 🚀" if diff >= 50000 else "#افزایش_قیمت 📈"
         else:
-            logger.warning("❌ Target hashtag found, but no valid price extracted from the 'عیار' line.")
-except Exception as e:
-    logger.error(f"Critical System Error: {e}")
+            trend = f"🔻 کاهش نسبت به قبل: {format_price(abs(diff))} تومان"
+            hashtag = "#سقوط_قیمت 📉" if abs(diff) >= 50000 else "#کاهش_قیمت 🔻"
+
+        msg = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
+🗓 {weekday} | {to_persian_number(date_text)}
+🕒 بروزرسانی: {to_persian_number(time_text)}
+
+💰 هر گرم: {format_price(current_price)} تومان
+{trend}
+
+━━━━━━━━━━━━━━━
+{hashtag} #طلا 
+طلای ماهان (اسکندری گلد)💎"""
+        
+        send_message(msg)
+
+    # ذخیره قیمت فعلی برای مقایسه بعدی
+    state["last_price"] = current_price
+
+    # ۳. گزارش پایانی روز (رأس ساعت ۲۰:۳۰ به بعد)
+    is_evening = (now.hour > 20) or (now.hour == 20 and now.minute >= 30)
+    
+    if is_evening and not state["summary_sent"]:
+        daily_diff = current_price - state["day_start_price"]
+        daily_percent = calculate_percent_change(state["day_start_price"], current_price)
+        
+        if daily_diff > 0:
+            daily_trend = f"🔺 رشد {to_persian_number(abs(daily_percent))}٪ ({format_price(abs(daily_diff))} تومان سود)"
+        elif daily_diff < 0:
+            daily_trend = f"🔻 افت {to_persian_number(abs(daily_percent))}٪ ({format_price(abs(daily_diff))} تومان افت)"
+        else:
+            daily_trend = "➖ بدون تغییر نسبت به صبح"
+
+        daily_msg = f"""📊 پرونده بازار امروز بسته شد!
+🗓 {weekday} | {to_persian_number(date_text)}
+
+🔸 بازگشایی صبح: {format_price(state["day_start_price"])}
+📈 بالاترین نرخ: {format_price(state["high"])}
+📉 پایین‌ترین نرخ: {format_price(state["low"])}
+💰 آخرین نرخ: {format_price(current_price)}
+
+برآیند امروز:
+{daily_trend}
+
+━━━━━━━━━━━━━━━
+#گزارش_روزانه #تحلیل_بازار 
+طلای ماهان (اسکندری گلد)💎"""
+        
+        send_message(daily_msg)
+        state["summary_sent"] = True
+
+    # ۴. گزارش ویژه آخر هفته (پنجشنبه‌ها ساعت ۲۰:۳۰)
+    if now.weekday() == 3 and is_evening and not state["weekly_summary_sent"]:
+        weekly_diff = current_price - state["week_start_price"]
+        weekly_percent = calculate_percent_change(state["week_start_price"], current_price)
+        
+        if weekly_diff > 0:
+            weekly_status = f"🟢 بازار صعودی بود و {to_persian_number(abs(weekly_percent))}٪ رشد کرد."
+        elif weekly_diff < 0:
+            weekly_status = f"🔴 بازار نزولی بود و {to_persian_number(abs(weekly_percent))}٪ افت کرد."
+        else:
+            weekly_status = "⚪️ بازار این هفته تقریباً ثابت بود."
+
+        weekly_msg = f"""🗓 پرونده ویژه آخر هفته!
+از شنبه تا پنجشنبه چه گذشت؟ 
+
+شروع هفته (شنبه): {format_price(state["week_start_price"])}
+پایان هفته (پنجشنبه): {format_price(current_price)}
+اختلاف: {format_price(abs(weekly_diff))} تومان
+
+وضعیت کلی:
+{weekly_status}
+
+━━━━━━━━━━━━━━━
+#پرونده_هفته #طلا_اقتصادی
+طلای ماهان (اسکندری گلد)💎"""
+        
+        send_message(weekly_msg)
+        state["weekly_summary_sent"] = True
+
+    # ذخیره نهایی
+    save_state(state)
+
+if __name__ == "__main__":
+    main()
