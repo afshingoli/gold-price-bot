@@ -5,18 +5,22 @@ on:
     - cron: "*/5 * * * *"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   run:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
+      
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          
       - name: Install requirements
         run: pip install -r requirements.txt
+        
       - name: Run bot
         run: python main.py
         env:
@@ -24,10 +28,11 @@ jobs:
           CHAT_ID: ${{ secrets.CHAT_ID }}
           EITAA_TOKEN: ${{ secrets.EITAA_TOKEN }}
           EITAA_CHAT_ID: ${{ secrets.EITAA_CHAT_ID }}
+          
       - name: Commit and push changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -m "Update prices and logs" || echo "No changes to commit"
+          git commit -m "Update bot state" || echo "No changes to commit"
           git push
