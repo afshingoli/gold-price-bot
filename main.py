@@ -30,6 +30,10 @@ def send_message(text):
         except:
             pass
 
+def clean_text_for_check(text):
+    # حذف فاصله‌ها، نیم‌فاصله‌ها و کشیدگی حروف (ـ) برای مقایسه دقیق و بدون خطا
+    return text.replace(" ", "").replace("‌", "").replace("ـ", "").replace("\u200c", "")
+
 try:
     url = f"https://t.me/s/{CHANNEL_USERNAME}"
     response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
@@ -40,6 +44,10 @@ try:
     current_price = None
     msg_id = None
     
+    # 🎯 هشتگ اختصاصی شما
+    target_hashtag = "#نرخ‌روزطــلانقــره‌وسکــه‌مشـهدمقــدس"
+    cleaned_target = clean_text_for_check(target_hashtag)
+    
     # گشتن در پیام‌ها از جدیدترین به قدیمی‌ترین
     if message_containers:
         for container in reversed(message_containers):
@@ -47,21 +55,23 @@ try:
             if text_div:
                 text = text_div.get_text()
                 
-                # 🎯 شرط طلایی شما: فقط اگر کلمه «عیار» در متن بود
-                if "عیار" in text:
+                # بررسی وجود هشتگ در متن (با حذف خطاهای نگارشی احتمالی تلگرام)
+                if cleaned_target in clean_text_for_check(text):
+                    # شکارچی قیمت: فقط اعدادی که کاما دارن
                     pattern = r'\d{1,3}[,٫]\d{3}[,٫]\d{3}'
                     matches = re.findall(pattern, text)
                     
                     prices = []
                     for m in matches:
                         clean_num = int(m.replace(",", "").replace("٫", ""))
+                        # فیلتر قیمت: فقط بین ۵ تا ۵۰ میلیون تومان
                         if 5000000 < clean_num < 50000000:
                             prices.append(clean_num)
                     
                     if prices:
                         current_price = max(prices)
                         msg_id = container.get('data-post', 'unknown')
-                        break # پیدا کردیم! دیگه بقیه پیام‌ها رو نگرد
+                        break # پیدا شد! توقف جستجو
         
         # اگر قیمت و آیدی پیام پیدا شد
         if current_price and msg_id:
