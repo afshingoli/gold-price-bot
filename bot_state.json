@@ -1,5 +1,13 @@
 {
     "id": "etjmir/28065",
     "price": 17700000,
-    "time": "2026-07-05T18:52:12.833688+03:30"
+    "time": "2026-07-05T18:52:12.833688+03:30",
+    "date": "2026-07-05",
+    "day_start_price": 17730000,
+    "last_price": 17730000,
+    "high": 17730000,
+    "low": 17730000,
+    "summary_sent": false,
+    "week_start_price": 17730000,
+    "weekly_summary_sent": false
 }
