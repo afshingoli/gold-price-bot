@@ -2,37 +2,41 @@ name: Gold Price Bot
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/30 * * * *" # اجرا هر ۳۰ دقیقه یکبار
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  run:
+  run-bot:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          
-      - name: Install requirements
-        run: pip install -r requirements.txt
-        
-      - name: Run bot
-        run: python main.py
+
+      - name: Install dependencies
+        run: |
+          pip install requests beautifulsoup4 jdatetime tzdata
+
+      - name: Run Python Script
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
           EITAA_TOKEN: ${{ secrets.EITAA_TOKEN }}
           EITAA_CHAT_ID: ${{ secrets.EITAA_CHAT_ID }}
-          
-      - name: Commit and push changes
+        run: python main.py
+
+      - name: Save State to GitHub
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
-          git commit -m "Update bot state" || echo "No changes to commit"
+          git add bot_state.json
+          git commit -m "Auto-update gold price state" || echo "No changes to commit"
+          git pull --rebase origin main || echo "Nothing to pull"
           git push
