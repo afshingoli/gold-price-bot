@@ -7,7 +7,7 @@
     "last_price": 17730000,
     "high": 17730000,
     "low": 17730000,
-    "summary_sent": false,
+    "summary_sent": true,
     "week_start_price": 17730000,
     "weekly_summary_sent": false
 }
