@@ -58,22 +58,31 @@ def calculate_percent_change(old, new):
 def send_to_api(url, data, name):
     try:
         res = session.post(url, data=data, timeout=15)
-        res.raise_for_status()
+        # اگر خطایی مثل 400 یا 401 بده اینجا دقیقا چاپ میشه تا بفهمیم مشکل از کجاست
+        res.raise_for_status() 
         print(f"✅ Sent successfully to {name}")
-    except Exception as e:
-        print(f"❌ Error sending to {name}: {e}")
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Error sending to {name}:\nUrl: {url}\nDetails: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+             print(f"❌ Server Response: {e.response.text}")
 
 def send_message(text):
+    # ارسال به تلگرام
     if BOT_TOKEN and CHAT_ID:
         tg_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         send_to_api(tg_url, {"chat_id": CHAT_ID, "text": text}, "Telegram")
+    else:
+        print("⚠️ Telegram token or chat_id is missing.")
         
+    # ارسال به ایتا
     if EITAA_TOKEN and EITAA_CHAT_ID:
         eitaa_url = f"https://eitaayar.ir/api/{EITAA_TOKEN}/sendMessage"
         send_to_api(eitaa_url, {"chat_id": EITAA_CHAT_ID, "text": text}, "Eitaa")
+    else:
+        print("⚠️ Eitaa token or chat_id is missing.")
 
 # =========================
-# SCRAPER (ROBUST)
+# SCRAPER (ROBUST & LINE-BY-LINE)
 # =========================
 def get_price():
     try:
@@ -81,22 +90,23 @@ def get_price():
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
         
-        # بررسی ۵ پیام آخر کانال برای جلوگیری از گم شدن قیمت بین پیام‌های متفرقه
         posts = soup.find_all("div", class_="tgme_widget_message_text")
         for post in reversed(posts[-5:]):
-            text = post.get_text("\n")
-            if "۱۸" in text or "18" in text or "عیار" in text:
-                price = extract_price(text)
-                # فیلتر منطقی قیمت (بین ۵ تا ۱۰۰ میلیون تومان)
-                if price and 5_000_000 < price < 100_000_000:
-                    return price
+            # بررسی خط به خط برای جلوگیری از خواندن اعداد متفرقه (مثل شماره حساب یا کد پیگیری)
+            lines = post.get_text("\n").split("\n")
+            for line in lines:
+                if "۱۸" in line or "18" in line or "عیار" in line:
+                    price = extract_price(line)
+                    # فیلتر شدید: قیمت ۱ گرم طلا فقط باید بین ۳ تا ۲۰ میلیون تومان باشد
+                    if price and 3_000_000 < price < 20_000_000:
+                        return price
         return None
     except Exception as e:
         print(f"❌ Scraper Error: {e}")
         return None
 
 # =========================
-# STATE MANAGEMENT
+# STATE MANAGEMENT (SELF-HEALING)
 # =========================
 def load_state():
     default_state = {
@@ -116,6 +126,12 @@ def load_state():
                 for key in default_state:
                     if key not in data:
                         data[key] = default_state[key]
+                
+                # سیستم خوددرمانی: پاک کردن اعداد نجومی و باگ‌های گذشته
+                if data.get("high", 0) > 20_000_000 or data.get("day_start_price", 0) > 20_000_000:
+                    print("⚠️ Auto-Heal: دیتابیس خراب بود (اعداد نجومی یافت شد). حافظه ریست شد.")
+                    return default_state
+                    
                 return data
         except:
             pass
@@ -131,12 +147,12 @@ def save_state(state):
         print(f"❌ State Save Error: {e}")
 
 # =========================
-# MAIN LOGIC
+# MAIN LOGIC (MARKETING & REPORTS)
 # =========================
 def main():
     current_price = get_price()
     if not current_price:
-        print("⚠️ No valid price found.")
+        print("⚠️ No valid price found in the last messages.")
         return
 
     now = datetime.now(ZoneInfo("Asia/Tehran"))
@@ -178,10 +194,10 @@ def main():
         # فلش‌ها و هشتگ‌های هوشمند
         if diff > 0:
             trend = f"🔺 افزایش نسبت به قبل: {format_price(diff)} تومان"
-            hashtag = "#صعودی 🚀" if diff >= 50000 else "#افزایش_قیمت 📈"
+            hashtag = "#صعودی 🚀" if diff >= 50_000 else "#افزایش_قیمت 📈"
         else:
             trend = f"🔻 کاهش نسبت به قبل: {format_price(abs(diff))} تومان"
-            hashtag = "#سقوط_قیمت 📉" if abs(diff) >= 50000 else "#کاهش_قیمت 🔻"
+            hashtag = "#سقوط_قیمت 📉" if abs(diff) >= 50_000 else "#کاهش_قیمت 🔻"
 
         msg = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار
 🗓 {weekday} | {to_persian_number(date_text)}
@@ -260,7 +276,7 @@ def main():
         send_message(weekly_msg)
         state["weekly_summary_sent"] = True
 
-    # ذخیره نهایی
+    # ذخیره نهایی حافظه ربات
     save_state(state)
 
 if __name__ == "__main__":
