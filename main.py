@@ -86,7 +86,7 @@ def get_etjmir_data():
     return None
 
 # =========================
-# SCRAPER 2: TSDAYAN (+10 و جدول اختصاصی)
+# SCRAPER 2: TSDAYAN (+10 و قالب جدید)
 # =========================
 def get_tsdayan_data():
     try:
@@ -125,15 +125,14 @@ def get_tsdayan_data():
                 
                 # اگر هر ۴ عدد با موفقیت استخراج و +10 شدند
                 if f_red and f_blue and p_red and p_blue:
-                    formatted_msg = f"""📊 نرخ نقدی طلای اسکندری
-┏━━━━━━━━━━━━━━┓
-┃ 🔴 نقد فردا {f_red} ┃
-┃ 🔵 نقد فردا {f_blue} ┃
-┣━━━━━━━━━━━━━━┫
-┃ 🔴 نقد پس‌فردا {p_red} ┃
-┃ 🔵 نقد پس‌فردا {p_blue} ┃
-┗━━━━━━━━━━━━━━┛
-📌 @AbshodeEskandariGold"""
+                    # قالب‌بندی جدید دقیقاً مشابه درخواست کاربر
+                    formatted_msg = f"""💰 نرخ نقدی طلای آبشده اسکندری
+🔴 نقد فردا: {f_red}
+🔵 نقد فردا: {f_blue}
+━━━━━━━━━━━━
+🔴 نقد پس‌فردا: {p_red}
+🔵 نقد پس‌فردا: {p_blue}
+@AbshodeEskandariGold"""
                     return {"text": formatted_msg, "msg_id": msg_id}
     except Exception as e:
         print(f"❌ Scraper Error (TSdayan): {e}")
@@ -183,24 +182,22 @@ def main():
     weekday = weekdays[now.weekday()]
 
     # ------------------------------------------------
-    # شاخه اول: کانال اصلی (با سیستم تشخیص ویرایش)
+    # شاخه اول: کانال اصلی
     # ------------------------------------------------
     etjmir_data = get_etjmir_data()
     if etjmir_data:
         current_price = etjmir_data["price"]
         current_msg_id = etjmir_data["msg_id"]
         
-        # ماشه دوگانه برای کانال اول
+        # ماشه دوگانه برای کانال اول (جلوگیری از خطای ویرایش پست)
         if (current_msg_id != state.get("last_msg_id")) or (current_price != state.get("last_price")):
             
             msg_main = f"💎 نرخ لحظه‌ای طلای ۱۸ عیار\n🗓 {to_persian_number(date_text)} | {weekday}\n🕒 بروزرسانی: {to_persian_number(time_text)}\n\n💰 هر گرم: {format_price(current_price)} تومان\n━━━━━━━━━━━━━━━\nطلای ماهان (اسکندری گلد)💎"
             
-            # ارسال به تلگرام
             if BOT_TOKEN and CHAT_ID:
                 url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
                 send_to_api(url, {"chat_id": CHAT_ID, "text": msg_main}, "Telegram (Main)")
                 
-            # ارسال به ایتا
             if EITAA_TOKEN and EITAA_CHAT_ID:
                 url = f"https://eitaayar.ir/api/{EITAA_TOKEN}/sendMessage"
                 send_to_api(url, {"chat_id": EITAA_CHAT_ID, "text": msg_main}, "Eitaa (Main)")
@@ -213,14 +210,14 @@ def main():
         print("⚠️ Etjmir: Could not find valid price or post.")
 
     # ------------------------------------------------
-    # شاخه دوم: کانال آبشده (+10 و جدول اختصاصی)
+    # شاخه دوم: کانال آبشده (+10 و قالب جدید)
     # ------------------------------------------------
     tsdayan_data = get_tsdayan_data()
     if tsdayan_data:
         current_text = tsdayan_data["text"]
         current_msg_id = tsdayan_data["msg_id"]
         
-        # ماشه دوگانه برای کانال دوم (اگه پست جدید بود یا محتوای جدول عوض شده بود)
+        # ماشه دوگانه برای کانال دوم
         if (current_msg_id != state.get("last_tsdayan_msg_id")) or (current_text != state.get("last_tsdayan_text")):
             
             if BOT_TOKEN and ABSHODE_CHAT_ID:
