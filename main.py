@@ -75,11 +75,9 @@ def get_etjmir_data():
                 continue
             text = text_div.get_text("\n")
             
-            # فیلتر هوشمند برای هشتگ یا کلمه عیار
             clean_text = text.replace("ـ", "").replace(" ", "").replace("‌", "")
             if "نرخروزطلانقره" in clean_text or "عیار" in text:
                 price = extract_price(text)
-                # رنج قیمت طلا برای فیلتر کردن شماره تماس‌ها
                 if price and 5_000_000 < price < 50_000_000:
                     msg_id = post.get("data-post", "")
                     return {"price": price, "msg_id": msg_id}
@@ -88,31 +86,55 @@ def get_etjmir_data():
     return None
 
 # =========================
-# SCRAPER 2: TSDAYAN (+10)
+# SCRAPER 2: TSDAYAN (+10 و جدول اختصاصی)
 # =========================
-def get_and_modify_tsdayan():
+def get_tsdayan_data():
     try:
         r = session.get(TSDAYAN_CHANNEL_URL, timeout=15)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
-        posts = soup.find_all("div", class_="tgme_widget_message_text")
+        posts = soup.find_all("div", class_="tgme_widget_message")
         
         for post in reversed(posts[-3:]):
-            text = post.get_text("\n")
-            if "نقد فردا" in text and ("🔴" in text or "🔵" in text):
+            text_div = post.find("div", class_="tgme_widget_message_text")
+            if not text_div:
+                continue
+            text = text_div.get_text("\n")
+            msg_id = post.get("data-post", "")
+            
+            if "نقد فردا" in text and "🔴" in text:
                 
-                def add_10(match):
-                    symbol = match.group(1)
-                    num_str = match.group(2).replace(",", "").replace("،", "")
-                    num_str = num_str.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
-                    try:
-                        new_num = int(num_str) + 10
-                        return f"{symbol} {new_num:,}"
-                    except:
-                        return match.group(0)
+                # استخراج‌کننده هوشمند اعداد با قابلیت افزودن 10 واحد
+                def extract_nums(pattern, input_text):
+                    m = re.search(pattern, input_text, re.DOTALL)
+                    if m:
+                        def clean_and_add(s):
+                            s = s.replace(",", "").replace("،", "").translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
+                            new_num = int(s) + 10
+                            return f"{new_num:,}"
+                        try:
+                            return clean_and_add(m.group(1)), clean_and_add(m.group(2))
+                        except:
+                            pass
+                    return None, None
 
-                modified_text = re.sub(r'(🔴|🔵)\s*([0-9۰-۹,،]+)', add_10, text)
-                return modified_text
+                # گرفتن اعداد نقد فردا
+                f_red, f_blue = extract_nums(r'نقد\s*فردا.*?🔴\s*([\d,،۰-۹]+).*?🔵\s*([\d,،۰-۹]+)', text)
+                # گرفتن اعداد نقد پس‌فردا
+                p_red, p_blue = extract_nums(r'نقد\s*پس.*?فردا.*?🔴\s*([\d,،۰-۹]+).*?🔵\s*([\d,،۰-۹]+)', text)
+                
+                # اگر هر ۴ عدد با موفقیت استخراج و +10 شدند
+                if f_red and f_blue and p_red and p_blue:
+                    formatted_msg = f"""📊 نرخ نقدی طلای اسکندری
+┏━━━━━━━━━━━━━━┓
+┃ 🔴 نقد فردا {f_red} ┃
+┃ 🔵 نقد فردا {f_blue} ┃
+┣━━━━━━━━━━━━━━┫
+┃ 🔴 نقد پس‌فردا {p_red} ┃
+┃ 🔵 نقد پس‌فردا {p_blue} ┃
+┗━━━━━━━━━━━━━━┛
+📌 @AbshodeEskandariGold"""
+                    return {"text": formatted_msg, "msg_id": msg_id}
     except Exception as e:
         print(f"❌ Scraper Error (TSdayan): {e}")
     return None
@@ -124,7 +146,8 @@ def load_state():
     default_state = {
         "last_price": 0,
         "last_msg_id": "",
-        "last_tsdayan_text": ""
+        "last_tsdayan_text": "",
+        "last_tsdayan_msg_id": ""
     }
     if os.path.exists(STATE_FILE):
         try:
@@ -167,7 +190,7 @@ def main():
         current_price = etjmir_data["price"]
         current_msg_id = etjmir_data["msg_id"]
         
-        # ماشه دوگانه: اگر آیدی پست جدید بود *یا* قیمت ویرایش شده بود
+        # ماشه دوگانه برای کانال اول
         if (current_msg_id != state.get("last_msg_id")) or (current_price != state.get("last_price")):
             
             msg_main = f"💎 نرخ لحظه‌ای طلای ۱۸ عیار\n🗓 {to_persian_number(date_text)} | {weekday}\n🕒 بروزرسانی: {to_persian_number(time_text)}\n\n💰 هر گرم: {format_price(current_price)} تومان\n━━━━━━━━━━━━━━━\nطلای ماهان (اسکندری گلد)💎"
@@ -190,19 +213,26 @@ def main():
         print("⚠️ Etjmir: Could not find valid price or post.")
 
     # ------------------------------------------------
-    # شاخه دوم: کانال آبشده (TSdayan)
+    # شاخه دوم: کانال آبشده (+10 و جدول اختصاصی)
     # ------------------------------------------------
-    tsdayan_text = get_and_modify_tsdayan()
-    if tsdayan_text and tsdayan_text != state.get("last_tsdayan_text"):
-        msg_abshode = f"📊 بروزرسانی نرخ آبشده\n🕒 {to_persian_number(time_text)}\n\n{to_persian_number(tsdayan_text)}\n\n━━━━━━━━━━━━━━━\nطلای ماهان (اسکندری گلد)💎"
+    tsdayan_data = get_tsdayan_data()
+    if tsdayan_data:
+        current_text = tsdayan_data["text"]
+        current_msg_id = tsdayan_data["msg_id"]
         
-        if BOT_TOKEN and ABSHODE_CHAT_ID:
-            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-            send_to_api(url, {"chat_id": ABSHODE_CHAT_ID, "text": msg_abshode}, "Telegram (Abshode)")
+        # ماشه دوگانه برای کانال دوم (اگه پست جدید بود یا محتوای جدول عوض شده بود)
+        if (current_msg_id != state.get("last_tsdayan_msg_id")) or (current_text != state.get("last_tsdayan_text")):
             
-        state["last_tsdayan_text"] = tsdayan_text
+            if BOT_TOKEN and ABSHODE_CHAT_ID:
+                url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+                send_to_api(url, {"chat_id": ABSHODE_CHAT_ID, "text": current_text}, "Telegram (Abshode)")
+                
+            state["last_tsdayan_msg_id"] = current_msg_id
+            state["last_tsdayan_text"] = current_text
+        else:
+            print("✅ TSdayan: No new changes.")
     else:
-        print("✅ TSdayan: No new changes.")
+        print("⚠️ TSdayan: Could not find target pattern in recent posts.")
 
     save_state(state)
 
