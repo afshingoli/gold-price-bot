@@ -211,7 +211,7 @@ def main():
         
         msg_main = f"💎 نرخ لحظه‌ای طلای ۱۸ عیار\n🗓 {to_persian_number(date_text)} | {weekday}\n🕒 بروزرسانی: {to_persian_number(time_text)}\n\n💰 هر گرم: {format_price(current_price)} تومان\n━━━━━━━━━━━━━━━\nطلای ماهان (اسکندری گلد)💎"
         
-        # الف) تلگرام: ارسال سریع و در لحظه (هم برای پست جدید، هم ویرایش)
+        # الف) تلگرام: ارسال سریع و در لحظه
         if (current_msg_id != state.get("last_msg_id")) or (current_price != state.get("last_price")):
             if BOT_TOKEN and CHAT_ID:
                 url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -258,7 +258,7 @@ def main():
             state["last_tsdayan_text"] = current_text
 
     # ------------------------------------------------
-    # ۳. گزارش خلاصه بازار (ساعت ۲۱:۰۰) - تلگرام و ایتا
+    # ۳. گزارش خلاصه بازار (ساعت ۲۱:۰۰) - *** فقط ایتا ***
     # ------------------------------------------------
     if now.hour >= 21 and not state["summary_2100"]:
         try:
@@ -291,9 +291,7 @@ def main():
 #گزارش_روزانه #تحلیل_بازار 
 طلای ماهان (اسکندری گلد)💎"""
                     
-                    if BOT_TOKEN and CHAT_ID:
-                        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-                        send_to_api(url, {"chat_id": CHAT_ID, "text": summary_msg}, "Telegram (Summary)")
+                    # ارسال فقط به ایتا
                     if EITAA_TOKEN and EITAA_CHAT_ID:
                         url = f"https://eitaayar.ir/api/{EITAA_TOKEN}/sendMessage"
                         send_to_api(url, {"chat_id": EITAA_CHAT_ID, "text": summary_msg}, "Eitaa (Summary)")
