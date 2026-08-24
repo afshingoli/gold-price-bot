@@ -185,7 +185,7 @@ def main():
     current_date_str = now.strftime("%Y-%m-%d")
     
     # ------------------------------------------------
-    # ریست کردن حافظه برای روز جدید
+    # 0. ریست کردن حافظه برای روز جدید
     # ------------------------------------------------
     if state["date"] != current_date_str:
         state["date"] = current_date_str
@@ -193,7 +193,6 @@ def main():
         state["eitaa_1400"] = False
         state["eitaa_1700"] = False
         state["summary_2100"] = False
-        # پاک کردن قیمت‌های روز گذشته
         try:
             with open(DAILY_PRICES_FILE, "w", encoding="utf-8") as f:
                 f.write("")
@@ -201,19 +200,18 @@ def main():
             pass
 
     # ------------------------------------------------
-    # ۱. کانال اصلی طلا (اسکن اتحادیه)
+    # ۱. کانال اصلی طلا (اسکن اتحادیه) - بررسی ویرایش و پست جدید
     # ------------------------------------------------
     etjmir_data = get_etjmir_data()
     if etjmir_data:
         current_price = etjmir_data["price"]
         current_msg_id = etjmir_data["msg_id"]
         
-        # ذخیره قیمت برای محاسبه خلاصه شبانه
         save_daily_price(current_price)
         
         msg_main = f"💎 نرخ لحظه‌ای طلای ۱۸ عیار\n🗓 {to_persian_number(date_text)} | {weekday}\n🕒 بروزرسانی: {to_persian_number(time_text)}\n\n💰 هر گرم: {format_price(current_price)} تومان\n━━━━━━━━━━━━━━━\nطلای ماهان (اسکندری گلد)💎"
         
-        # الف) ارسال به تلگرام (در لحظه و سریع)
+        # الف) تلگرام: ارسال سریع و در لحظه (هم برای پست جدید، هم ویرایش)
         if (current_msg_id != state.get("last_msg_id")) or (current_price != state.get("last_price")):
             if BOT_TOKEN and CHAT_ID:
                 url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -221,25 +219,22 @@ def main():
             state["last_msg_id"] = current_msg_id
             state["last_price"] = current_price
 
-        # ب) ارسال به ایتا (فقط راس ساعت‌های مقرر)
+        # ب) ایتا: فقط در ساعت‌های مقرر
         h = now.hour
         m = now.minute
         
-        # پیام ساعت ۹:۳۰ صبح ایتا
         if h == 9 and m >= 30 and not state["eitaa_930"]:
             if EITAA_TOKEN and EITAA_CHAT_ID:
                 url = f"https://eitaayar.ir/api/{EITAA_TOKEN}/sendMessage"
                 send_to_api(url, {"chat_id": EITAA_CHAT_ID, "text": msg_main}, "Eitaa (09:30)")
             state["eitaa_930"] = True
 
-        # پیام ساعت ۲:۰۰ ظهر ایتا
         if h == 14 and m >= 0 and not state["eitaa_1400"]:
             if EITAA_TOKEN and EITAA_CHAT_ID:
                 url = f"https://eitaayar.ir/api/{EITAA_TOKEN}/sendMessage"
                 send_to_api(url, {"chat_id": EITAA_CHAT_ID, "text": msg_main}, "Eitaa (14:00)")
             state["eitaa_1400"] = True
 
-        # پیام ساعت ۵:۰۰ عصر ایتا
         if h == 17 and m >= 0 and not state["eitaa_1700"]:
             if EITAA_TOKEN and EITAA_CHAT_ID:
                 url = f"https://eitaayar.ir/api/{EITAA_TOKEN}/sendMessage"
@@ -247,13 +242,14 @@ def main():
             state["eitaa_1700"] = True
 
     # ------------------------------------------------
-    # ۲. کانال آبشده (در لحظه و سریع برای تلگرام)
+    # ۲. کانال آبشده (TSdayan) - ارسال در لحظه به تلگرام
     # ------------------------------------------------
     tsdayan_data = get_tsdayan_data()
     if tsdayan_data:
         current_text = tsdayan_data["text"]
         current_msg_id = tsdayan_data["msg_id"]
         
+        # در صورتی که پست جدید باشه یا ویرایش شده باشه
         if (current_msg_id != state.get("last_tsdayan_msg_id")) or (current_text != state.get("last_tsdayan_text")):
             if BOT_TOKEN and ABSHODE_CHAT_ID:
                 url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -262,7 +258,7 @@ def main():
             state["last_tsdayan_text"] = current_text
 
     # ------------------------------------------------
-    # ۳. گزارش خلاصه بازار (رأس ساعت ۹ شب / ۲۱:۰۰)
+    # ۳. گزارش خلاصه بازار (ساعت ۲۱:۰۰) - تلگرام و ایتا
     # ------------------------------------------------
     if now.hour >= 21 and not state["summary_2100"]:
         try:
@@ -295,7 +291,6 @@ def main():
 #گزارش_روزانه #تحلیل_بازار 
 طلای ماهان (اسکندری گلد)💎"""
                     
-                    # ارسال گزارش شبانه به تلگرام و ایتا
                     if BOT_TOKEN and CHAT_ID:
                         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
                         send_to_api(url, {"chat_id": CHAT_ID, "text": summary_msg}, "Telegram (Summary)")
