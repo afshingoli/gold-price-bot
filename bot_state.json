@@ -2,7 +2,7 @@
     "id": "etjmir/28065",
     "price": 17700000,
     "time": "2026-07-05T18:52:12.833688+03:30",
-    "date": "2026-09-03",
+    "date": "2026-09-04",
     "day_start_price": 17720000,
     "last_price": 23360000,
     "high": 17770000,
@@ -15,6 +15,6 @@
     "last_tsdayan_msg_id": "TSdayan/718989",
     "eitaa_930": false,
     "eitaa_1400": false,
-    "eitaa_1700": true,
+    "eitaa_1700": false,
     "summary_2100": false
 }
