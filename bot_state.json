@@ -2,7 +2,7 @@
     "id": "etjmir/28065",
     "price": 17700000,
     "time": "2026-07-05T18:52:12.833688+03:30",
-    "date": "2026-09-15",
+    "date": "2026-09-16",
     "day_start_price": 17720000,
     "last_price": 23200000,
     "high": 17770000,
@@ -11,10 +11,10 @@
     "week_start_price": 17730000,
     "weekly_summary_sent": false,
     "last_msg_id": "etjmir/30679",
-    "last_tsdayan_text": "💰 نرخ نقدی طلای آبشده اسکندری\n🔴 نقد فردا: 100,660\n🔵 نقد فردا: 100,530\n━━━━━━━━━━━━\n🔴 نقد پس‌فردا: 101,360\n🔵 نقد پس‌فردا: 101,230\n@AbshodeEskandariGold",
-    "last_tsdayan_msg_id": "TSdayan/737724",
+    "last_tsdayan_text": "💰 نرخ نقدی طلای آبشده اسکندری\n🔴 نقد فردا: 100,650\n🔵 نقد فردا: 100,370\n━━━━━━━━━━━━\n🔴 نقد پس‌فردا: 101,370\n🔵 نقد پس‌فردا: 101,100\n@AbshodeEskandariGold",
+    "last_tsdayan_msg_id": "TSdayan/737749",
     "eitaa_930": false,
     "eitaa_1400": false,
-    "eitaa_1700": true,
+    "eitaa_1700": false,
     "summary_2100": false
 }
