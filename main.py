@@ -61,6 +61,12 @@ def main():
                 continue
                 
             text = fa_to_en_number(text_div.get_text())
+            
+            # 🛑 فیلتر کلمات ممنوعه (جلوگیری از شکار تبلیغات و آموزش)
+            blacklist = ["آموزش", "آکادمی", "شهریه", "مدرس", "دوره", "شتاب‌دهنده", "ثبت‌نام", "لوتوس"]
+            if any(bad_word in text for bad_word in blacklist):
+                continue
+                
             clean_text = text.replace("ـ", "").replace(" ", "").replace("‌", "")
 
             # فیلتر کلمات کلیدی طلا
@@ -71,7 +77,7 @@ def main():
                     
                 for n in numbers:
                     clean_num = int(n.replace(",", "").replace("،", ""))
-                    # فیلتر رنج دقیق قیمت طلا (حذف اعداد پرت مثل شماره تلفن یا بازدید)
+                    # فیلتر رنج دقیق قیمت طلا
                     if 5000000 < clean_num < 50000000:
                         current_price = clean_num
                         current_msg_id = msg.get('data-post', '')
@@ -93,20 +99,37 @@ def main():
             weekdays = ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه", "یکشنبه"]
             weekday = weekdays[now.weekday()]
 
-            message = f"💎 نرخ لحظه‌ای طلای ۱۸ عیار\n🗓 {to_persian_number(date_text)} | {weekday}\n🕒 بروزرسانی: {to_persian_number(time_text)}\n\n💰 هر گرم: {to_persian_number(f'{current_price:,}')} تومان\n━━━━━━━━━━━━━━━\nطلای ماهان (اسکندری گلد)💎"
+            # 💎 قالب نهایی با برند «ماها گلد» و وبسایت
+            message = f"""💎 نرخ لحظه‌ای طلای ۱۸ عیار 
+🗓 {to_persian_number(date_text)} | {weekday} 
+🕒 بروزرسانی: {to_persian_number(time_text)} 
+
+💰 هر گرم: {to_persian_number(f'{current_price:,}')} تومان 
+━━━━━━━━━━━━━━━ 
+طلای ماهان (ماها گلد)💎 
+خرید از طریق وبسایت 
+🌐 www.mahaagold.com 🌐"""
 
             # ارسال به تلگرام
             if BOT_TOKEN and CHAT_ID:
                 try:
-                    session.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data={"chat_id": CHAT_ID, "text": message}, timeout=10)
-                    print("✅ تلگرام آپدیت شد.")
+                    res_tg = session.post(
+                        f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", 
+                        data={"chat_id": CHAT_ID, "text": message}, 
+                        timeout=10
+                    )
+                    print(f"✅ تلگرام آپدیت شد. وضعیت: {res_tg.status_code}")
                 except Exception as e:
                     print(f"❌ خطا در تلگرام: {e}")
                     
             # ارسال به ایتا
             if EITAA_TOKEN and EITAA_CHAT_ID:
                 try:
-                    res_eitaa = session.post(f"https://eitaayar.ir/api/{EITAA_TOKEN}/sendMessage", data={"chat_id": EITAA_CHAT_ID, "text": message}, timeout=10)
+                    res_eitaa = session.post(
+                        f"https://eitaayar.ir/api/{EITAA_TOKEN}/sendMessage", 
+                        data={"chat_id": EITAA_CHAT_ID, "text": message}, 
+                        timeout=10
+                    )
                     print(f"✅ ایتا آپدیت شد. وضعیت: {res_eitaa.status_code}")
                 except Exception as e:
                     print(f"❌ خطا در ایتا: {e}")
