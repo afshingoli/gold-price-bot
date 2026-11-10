@@ -106,9 +106,7 @@ def main():
 ⋄ ─── ✦ ─── ⋄
 💰 قیمت هر گرم طلای ۱۸ عیار
 {to_persian_number(f'{current_price:,}')} تومان
-⋄ ─── ✦ ─── ⋄
-✨خرید و فروش آنلاین طلا، آسان و مطمئن ازطریق  وبسایت:
-🌐 www.mahaagold.com"""
+⋄ ─── ✦ ─── ⋄"""
 
             # ارسال به تلگرام
             if BOT_TOKEN and CHAT_ID:
