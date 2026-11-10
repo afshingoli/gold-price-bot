@@ -99,17 +99,17 @@ def main():
             weekdays = ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه", "یکشنبه"]
             weekday = weekdays[now.weekday()]
 
-            # 💎 قالب اختصاصی و جدید
-            message = f"""💎 گزارش لحظه‌ای قیمت طلا | طلای ماهان (ماها گلد)
+            # 💎 قالب اختصاصی ماها گلد بر اساس آخرین تغییرات
+            message = f"""💎 طلای ماهان (ماها گلد)
 🗓 {weekday} | {to_persian_number(date_text)}
-🕒 آخرین بروزرسانی: {to_persian_number(time_text)}
+🕒 آخرین بروزرسانی نرخ طلا: {to_persian_number(time_text)}
 ⋄ ─── ✦ ─── ⋄
 💰 قیمت هر گرم طلای ۱۸ عیار
 {to_persian_number(f'{current_price:,}')} تومان
 ⋄ ─── ✦ ─── ⋄
 ✨ ماها گلد | همراه هوشمند سرمایه‌گذاری طلا
 خرید و فروش آنلاین طلا، آسان و مطمئن
-🌐 https://www.mahaagold.com"""
+🌐 www.mahaagold.com"""
 
             # ارسال به تلگرام
             if BOT_TOKEN and CHAT_ID:
